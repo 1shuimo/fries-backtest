@@ -1,10 +1,189 @@
-# One symbol per line, Yahoo format. Lines starting with # are ignored.
-# Replace these placeholders with your own pool.
+# Pool from Futu watchlist export, 2026-10-28. Yahoo format, one per line.
+# Excluded per FriesTrader universe rules (leveraged/inverse ETF filter):
+#   SOXS SOXL ROBN IREZ SPCH SNXX RAM MVLL GOOX NVDL KORU INTW CRWG
+#   AXTX COHX ORCX AAOX LITX GDXU DIG
+# Excluded as indices (not tradable): .SOX .HXC .IXIC
+# Stocks/ETFs with < ~1 year of history are dropped automatically by the engine.
+
+# Semiconductors & equipment
+NVDA
+AMD
+AVGO
+TSM
+INTC
+MU
+QCOM
+ARM
+TXN
+ON
+STM
+GFS
+MRVL
+MPWR
+TSEM
+ASX
+WOLF
+NVTS
+POET
+SKHY
+CBRS
+ALAB
+CRDO
+MXL
+SIVEF
+ASML
+AMAT
+KLAC
+LRCX
+TER
+ENTG
+ACMR
+AEHR
+AXTI
+DQ
+# Storage / hardware / networking / optical
+SNDK
+WDC
+STX
+DELL
+QMCO
+UMAC
+IONQ
+ANET
+CLS
+COHR
+LITE
+CIEN
+AAOI
+FN
+GLW
+VIAV
+NOK
+ONDS
+MRAAY
+OUST
+AEVA
+HSAI
+GPRO
+# AI infra / data centers / software
+CRWV
+NBIS
+IREN
+CIFR
+CORZ
+APLD
+DOCN
+VNET
+KC
+ORCL
+PLTR
+SNPS
+IBM
+AI
+S
+PD
+U
+VRT
+ETN
+GEV
+BE
+TT
+# Mega caps / internet
 AAPL
 MSFT
-NVDA
+GOOG
 AMZN
-GOOGL
 META
 TSLA
-AMD
+NFLX
+TTWO
+NTES
+BABA
+PDD
+JD
+BIDU
+BILI
+TME
+SE
+LI
+XPEV
+NIO
+# Fintech / financials
+AFRM
+IBKR
+CRCL
+FIGR
+SECZ
+LU
+C
+GS
+L
+# Space / defense / nuclear / energy
+SPCX
+RKLB
+LUNR
+BWXT
+GE
+LOAR
+OKLO
+LTBR
+CEG
+D
+UUUU
+FLNC
+JKS
+CSIQ
+AR
+EE
+E
+# Metals & mining
+FCX
+SCCO
+ERO
+TGB
+B
+SBSW
+MP
+USAR
+CRML
+NB
+ATLX
+SGML
+SQM
+ALB
+LIN
+# Healthcare
+MRNA
+LLY
+NVO
+AZN
+TEM
+A
+RGC
+# Consumer / industrial / other
+KO
+NKE
+AS
+AAP
+OI
+CSV
+TNC
+TG
+WS
+J
+ACM
+R
+TIC
+NSSC
+WPC
+GF
+# ETFs (non-leveraged)
+GLD
+QQQ
+SOXX
+MAGS
+LYTE
+NCLD
+NASA
+DRAM
+MFLX

@@ -45,7 +45,8 @@ def walk_bar(p,b,path):
     return None
 
 
-def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rule='body5'):
+def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rule='body5',arm_pct=0.0):
+    """arm_pct: close_only breakeven exit arms only once net trade P&L exceeds arm_pct x cost (0 = original rule)."""
     assert path in ('high_first','low_first','close_only')
     assert exit_rule in ('body5','322','control','q_ma10')
     SECTOR = sector_map if sector_map is not None else globals()['SECTOR']
@@ -170,7 +171,7 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
                     pending[s]='ma10_exit'
                 elif p['held']>=3 and p['stage']==0:
                     pending[s]=1
-            if path=='close_only' and net>0:
+            if path=='close_only' and net>arm_pct*p['cost']:
                 p['armed']=True
         last.update({s:b.close for s,b in today.items()})
         eq=cash+sum(p['qty']*last[s] for s,p in pos.items())

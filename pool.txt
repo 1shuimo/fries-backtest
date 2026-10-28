@@ -1,0 +1,10 @@
+# One symbol per line, Yahoo format. Lines starting with # are ignored.
+# Replace these placeholders with your own pool.
+AAPL
+MSFT
+NVDA
+AMZN
+GOOGL
+META
+TSLA
+AMD

@@ -1,0 +1,49 @@
+name: backtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Backtest start date"
+        default: "2021-01-01"
+      conviction:
+        description: "Assumed conviction tier (low/medium/high)"
+        default: "medium"
+      benchmark:
+        description: "Benchmark symbol"
+        default: "SPY"
+  push:
+    branches: [main]
+    paths: ["pool.txt", "rules.json", "backtest.py"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backtest
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance pandas
+      - name: Download prices
+        run: python fetch_data.py --benchmark "${{ inputs.benchmark || 'SPY' }}"
+      - name: Backtest
+        run: |
+          python backtest.py \
+            --start "${{ inputs.start || '2021-01-01' }}" \
+            --conviction "${{ inputs.conviction || 'medium' }}" \
+            --benchmark "${{ inputs.benchmark || 'SPY' }}"
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f results/ data/
+          git commit -m "Backtest results $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]" || echo "nothing to commit"
+          git push

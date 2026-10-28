@@ -1,0 +1,44 @@
+{
+  "_comment": "Copied from FriesTrader risk_rules.json defaults (YizhiSong/FriesTrader). Edit thresholds here to test variants.",
+  "universe": {
+    "min_avg_daily_volume": 1000000,
+    "penny_stock_filter_enabled": true,
+    "penny_stock_price_threshold_usd": 5.0,
+    "trend_filter_enabled": true,
+    "trend_filter_lookback_trading_days": 200
+  },
+  "signal_thresholds": {
+    "price_move_60d_pct": 0.10,
+    "volume_spike_multiple": 2.0,
+    "pct_from_52wk_extreme": 0.03
+  },
+  "conviction_pct": {"high": 0.20, "medium": 0.12, "low": 0.06},
+  "position_sizing": {
+    "max_position_pct_of_account": 0.20,
+    "max_concurrent_positions": 4,
+    "min_cash_buffer_pct": 0.10
+  },
+  "stop_loss": {
+    "mode": "volatility_scaled",
+    "hard_stop_pct": 0.07,
+    "lookback": 20,
+    "min_bars": 10,
+    "volatility_stdev_multiplier": 2.5,
+    "min_stop_pct": 0.05,
+    "max_stop_pct": 0.15,
+    "fallback_stop_pct": 0.07
+  },
+  "take_profit": {
+    "tiers": [
+      {"gain_pct": 0.15, "sell_fraction_of_position": 0.25},
+      {"gain_pct": 0.30, "sell_fraction_of_position": 0.25},
+      {"gain_pct": 0.50, "sell_fraction_of_position": 0.25}
+    ]
+  },
+  "conviction_trim": {"enabled": true, "overweight_trigger_pct": 0.25, "min_overweight_conviction_cycles": 3},
+  "sell_reentry_lock": {"gain_close_max_trading_days": 10},
+  "loss_limits": {"daily_loss_limit_pct_of_account": 0.05, "weekly_loss_limit_pct_of_account": 0.10},
+  "wash_sale_avoidance": {"enabled": true, "lookback_window_days": 30},
+  "entry_price_gap": {"max_pct": 0.03},
+  "entry_extension": {"enabled": true, "max_extension_pct": 0.10}
+}

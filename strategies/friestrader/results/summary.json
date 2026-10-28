@@ -21,23 +21,23 @@
  "slippage": 0.0005,
  "capital": 10000,
  "strategy": {
-  "total_return": 0.5139,
-  "cagr": 0.074,
+  "total_return": 0.5101,
+  "cagr": 0.0735,
   "max_drawdown": -0.2836,
   "sharpe": 0.45,
   "volatility": 0.2071
  },
  "equal_weight_buy_hold": {
-  "total_return": 2.7704,
-  "cagr": 0.2565,
+  "total_return": 2.782,
+  "cagr": 0.2572,
   "max_drawdown": -0.3849,
   "sharpe": 0.76,
-  "volatility": 0.3998
+  "volatility": 0.3999
  },
  "benchmark": {
   "SPY": {
-   "total_return": 1.2562,
-   "cagr": 0.1503,
+   "total_return": 1.2573,
+   "cagr": 0.1504,
    "max_drawdown": -0.245,
    "sharpe": 0.93,
    "volatility": 0.1657
@@ -71,7 +71,7 @@
  "per_symbol": {
   "AMD": {
    "round_trips": 7,
-   "pnl": 1287.93
+   "pnl": 1287.92
   },
   "IREN": {
    "round_trips": 6,
@@ -319,7 +319,7 @@
   },
   "AZN": {
    "round_trips": 1,
-   "pnl": -61.6
+   "pnl": -61.61
   },
   "GOOG": {
    "round_trips": 1,
@@ -335,7 +335,7 @@
   },
   "TT": {
    "round_trips": 1,
-   "pnl": -71.89
+   "pnl": -71.9
   },
   "TSEM": {
    "round_trips": 1,

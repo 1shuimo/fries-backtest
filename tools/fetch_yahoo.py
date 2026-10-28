@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Download adjusted daily OHLCV for every symbol in pool.txt (+ benchmark) into data/.
+"""Download adjusted daily OHLCV from Yahoo for every symbol in the pool (+ benchmark) into <repo>/data/.
 Runs on GitHub Actions, which has normal internet access.
 Symbols use Yahoo format: AAPL, BRK-B, 0700.HK, 600519.SS, 000001.SZ"""
 import argparse, os, sys, time
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import yfinance as yf
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--pool", default="pool.txt")
+ap.add_argument("--pool", default=os.path.join(REPO, "strategies", "friestrader", "pool.txt"))
 ap.add_argument("--benchmark", default="SPY")
 ap.add_argument("--start", default="2019-06-01")  # ~1.5y warm-up before a 2021 backtest start
-ap.add_argument("--out", default="data")
+ap.add_argument("--out", default=os.path.join(REPO, "data"))
 a = ap.parse_args()
 
 syms = [l.split("#")[0].strip().upper() for l in open(a.pool)]

@@ -7,7 +7,7 @@ Only the data source differs from watchlist_backtest.py:
   - Cutoff: last complete session (default 2026-10-27), dropping any partial intraday bar.
   - Sectors: import_watchlist.prepare() on data/watchlist.csv (same mapping as Codex).
   - AZN is NOT rescaled: Yahoo history is already continuous across the 2026-02-02 listing change.
-Run from strategies/quant:  python3 run_ytd_yahoo.py [--cutoff 2026-10-27]
+Run from strategies/quant:  python3 run_ytd_yahoo.py [--cutoff 2026-10-27] [--data ../../data_futu]
 """
 import argparse
 import csv
@@ -89,9 +89,12 @@ def monthly(curve):
 
 
 def main():
+    global PRICES
     ap = argparse.ArgumentParser()
     ap.add_argument('--cutoff', default='2026-10-27')
+    ap.add_argument('--data', default=str(PRICES), help='per-symbol CSV folder (repo data/ = Yahoo, data_futu/ = Futu)')
     a = ap.parse_args()
+    PRICES = Path(a.data).resolve()
     cutoff = date.fromisoformat(a.cutoff)
     data, sectors, missing = universe(cutoff)
     sig = signal_sets(data)

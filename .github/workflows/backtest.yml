@@ -14,7 +14,11 @@ on:
         default: "SPY"
   push:
     branches: [main]
-    paths: ["pool.txt", "rules.json", "backtest.py"]
+    paths:
+      - "strategies/friestrader/pool.txt"
+      - "strategies/friestrader/rules.json"
+      - "strategies/friestrader/backtest.py"
+      - "tools/fetch_yahoo.py"
 
 permissions:
   contents: write
@@ -32,11 +36,13 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install yfinance pandas
-      - name: Download prices
-        run: python fetch_data.py --benchmark "${{ inputs.benchmark || 'SPY' }}"
-      - name: Backtest
+      - name: Tests
+        run: python -m unittest discover -s tests -v
+      - name: Download prices (Yahoo)
+        run: python tools/fetch_yahoo.py --benchmark "${{ inputs.benchmark || 'SPY' }}"
+      - name: FriesTrader backtest
         run: |
-          python backtest.py \
+          python strategies/friestrader/backtest.py \
             --start "${{ inputs.start || '2021-01-01' }}" \
             --conviction "${{ inputs.conviction || 'medium' }}" \
             --benchmark "${{ inputs.benchmark || 'SPY' }}"
@@ -44,6 +50,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f results/ data/
+          git add -f strategies/friestrader/results/ data/
           git commit -m "Backtest results $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]" || echo "nothing to commit"
           git push

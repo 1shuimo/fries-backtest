@@ -22,6 +22,9 @@ Data: data/<SYMBOL>.csv with columns Date,Open,High,Low,Close,Volume
 import argparse, csv, json, math, os, statistics
 from datetime import date, timedelta
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(os.path.dirname(HERE))
+
 
 # ---------------------------------------------------------------- data
 def load_csv(path):
@@ -287,16 +290,16 @@ def buy_hold(series_list, days, capital):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="data")
-    ap.add_argument("--pool", default="pool.txt")
-    ap.add_argument("--rules", default="rules.json")
+    ap.add_argument("--data", default=os.path.join(REPO, "data"))
+    ap.add_argument("--pool", default=os.path.join(HERE, "pool.txt"))
+    ap.add_argument("--rules", default=os.path.join(HERE, "rules.json"))
     ap.add_argument("--benchmark", default="SPY")
     ap.add_argument("--start", default="2021-01-01")
     ap.add_argument("--end", default=date.today().isoformat())
     ap.add_argument("--conviction", default="medium", choices=["low", "medium", "high"])
     ap.add_argument("--slippage", type=float, default=0.0005)
     ap.add_argument("--capital", type=float, default=10000)
-    ap.add_argument("--out", default="results")
+    ap.add_argument("--out", default=os.path.join(HERE, "results"))
     a = ap.parse_args()
 
     rules = json.load(open(a.rules))

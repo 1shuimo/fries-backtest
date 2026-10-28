@@ -1,5 +1,12 @@
 # fries-backtest
 
+## Strategy implementations / 策略目录
+
+- Root directory: Claude's FriesTrader rules engine, stock pool, results and existing GitHub Actions workflow (preserved).
+- [`strategies/quant`](strategies/quant/README.md): B1/KDJ + MA60, 2/3-day time exits, industry-capped next-open execution, 45-week oversold/322 proxies, Qullamaggie breakout/EP and historical leveraged-product experiments, with tests and data-fetch scripts.
+
+The engines coexist; their execution assumptions and results are **not interchangeable**. The root workflow continues to run FriesTrader only. Quant experiments require their own downloaded inputs and are run from `strategies/quant`; private source watchlists and local market-data caches are not included.
+
 Backtest of [FriesTrader](https://github.com/YizhiSong/FriesTrader)'s mechanical
 rules on a custom stock pool, run on GitHub Actions (which can download prices).
 

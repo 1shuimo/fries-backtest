@@ -1,0 +1,581 @@
+{
+ "period": [
+  "2021-01-04",
+  "2026-10-28"
+ ],
+ "trading_days": 1462,
+ "pool_size": 172,
+ "symbols_with_data": 163,
+ "missing_or_short": [
+  "SKHY",
+  "CBRS",
+  "SIVEF",
+  "SECZ",
+  "SPCX",
+  "LYTE",
+  "NCLD",
+  "NASA",
+  "DRAM"
+ ],
+ "conviction_assumed": "medium",
+ "slippage": 0.0005,
+ "capital": 10000,
+ "strategy": {
+  "total_return": 0.5139,
+  "cagr": 0.074,
+  "max_drawdown": -0.2836,
+  "sharpe": 0.45,
+  "volatility": 0.2071
+ },
+ "equal_weight_buy_hold": {
+  "total_return": 2.7704,
+  "cagr": 0.2565,
+  "max_drawdown": -0.3849,
+  "sharpe": 0.76,
+  "volatility": 0.3998
+ },
+ "benchmark": {
+  "SPY": {
+   "total_return": 1.2562,
+   "cagr": 0.1503,
+   "max_drawdown": -0.245,
+   "sharpe": 0.93,
+   "volatility": 0.1657
+  }
+ },
+ "round_trips": 309,
+ "win_rate": 0.427,
+ "avg_win": 258.62,
+ "avg_loss": -167.65,
+ "avg_hold_days": 27.0,
+ "exit_reasons": {
+  "take_profit": 207,
+  "stop_loss": 307
+ },
+ "entry_decisions": {
+  "bought": 311,
+  "max_concurrent_positions": 27617,
+  "entry_extension": 12420,
+  "entry_price_gap": 4195,
+  "sell_reentry_lock": 26761,
+  "wash_sale": 1345,
+  "loss_limit_halt": 478
+ },
+ "loss_limit_halt_days": 8,
+ "final_open_positions": [
+  "AI",
+  "ARM",
+  "QMCO",
+  "TIC"
+ ],
+ "per_symbol": {
+  "AMD": {
+   "round_trips": 7,
+   "pnl": 1287.93
+  },
+  "IREN": {
+   "round_trips": 6,
+   "pnl": 1231.11
+  },
+  "COHR": {
+   "round_trips": 6,
+   "pnl": 1115.12
+  },
+  "MRNA": {
+   "round_trips": 7,
+   "pnl": 967.63
+  },
+  "CRML": {
+   "round_trips": 5,
+   "pnl": 922.69
+  },
+  "VNET": {
+   "round_trips": 7,
+   "pnl": 912.04
+  },
+  "CLS": {
+   "round_trips": 3,
+   "pnl": 837.0
+  },
+  "ON": {
+   "round_trips": 7,
+   "pnl": 817.82
+  },
+  "TEM": {
+   "round_trips": 3,
+   "pnl": 733.03
+  },
+  "GPRO": {
+   "round_trips": 3,
+   "pnl": 703.28
+  },
+  "NFLX": {
+   "round_trips": 3,
+   "pnl": 630.4
+  },
+  "LUNR": {
+   "round_trips": 5,
+   "pnl": 483.51
+  },
+  "AVGO": {
+   "round_trips": 3,
+   "pnl": 472.25
+  },
+  "ETN": {
+   "round_trips": 1,
+   "pnl": 452.08
+  },
+  "AS": {
+   "round_trips": 2,
+   "pnl": 413.6
+  },
+  "ACMR": {
+   "round_trips": 9,
+   "pnl": 412.77
+  },
+  "BABA": {
+   "round_trips": 2,
+   "pnl": 385.86
+  },
+  "GLW": {
+   "round_trips": 4,
+   "pnl": 329.46
+  },
+  "AEVA": {
+   "round_trips": 6,
+   "pnl": 312.96
+  },
+  "LLY": {
+   "round_trips": 2,
+   "pnl": 292.43
+  },
+  "PDD": {
+   "round_trips": 5,
+   "pnl": 259.97
+  },
+  "CRWV": {
+   "round_trips": 3,
+   "pnl": 259.16
+  },
+  "LRCX": {
+   "round_trips": 1,
+   "pnl": 255.08
+  },
+  "XPEV": {
+   "round_trips": 6,
+   "pnl": 233.88
+  },
+  "ARM": {
+   "round_trips": 3,
+   "pnl": 233.06
+  },
+  "ASML": {
+   "round_trips": 1,
+   "pnl": 227.47
+  },
+  "AFRM": {
+   "round_trips": 7,
+   "pnl": 222.54
+  },
+  "FLNC": {
+   "round_trips": 4,
+   "pnl": 218.3
+  },
+  "C": {
+   "round_trips": 1,
+   "pnl": 217.07
+  },
+  "TSM": {
+   "round_trips": 1,
+   "pnl": 210.71
+  },
+  "SQM": {
+   "round_trips": 2,
+   "pnl": 205.7
+  },
+  "AMZN": {
+   "round_trips": 1,
+   "pnl": 199.66
+  },
+  "DELL": {
+   "round_trips": 3,
+   "pnl": 195.06
+  },
+  "WDC": {
+   "round_trips": 2,
+   "pnl": 187.19
+  },
+  "HSAI": {
+   "round_trips": 1,
+   "pnl": 155.59
+  },
+  "AI": {
+   "round_trips": 3,
+   "pnl": 154.36
+  },
+  "STM": {
+   "round_trips": 3,
+   "pnl": 147.94
+  },
+  "RGC": {
+   "round_trips": 2,
+   "pnl": 146.31
+  },
+  "MRVL": {
+   "round_trips": 3,
+   "pnl": 145.94
+  },
+  "MP": {
+   "round_trips": 3,
+   "pnl": 142.6
+  },
+  "TGB": {
+   "round_trips": 1,
+   "pnl": 126.44
+  },
+  "TME": {
+   "round_trips": 3,
+   "pnl": 119.73
+  },
+  "OKLO": {
+   "round_trips": 5,
+   "pnl": 112.22
+  },
+  "USAR": {
+   "round_trips": 2,
+   "pnl": 107.01
+  },
+  "INTC": {
+   "round_trips": 3,
+   "pnl": 103.77
+  },
+  "ERO": {
+   "round_trips": 2,
+   "pnl": 81.94
+  },
+  "BILI": {
+   "round_trips": 5,
+   "pnl": 75.27
+  },
+  "AXTI": {
+   "round_trips": 1,
+   "pnl": 70.7
+  },
+  "AMAT": {
+   "round_trips": 2,
+   "pnl": 63.87
+  },
+  "AAOI": {
+   "round_trips": 2,
+   "pnl": 62.76
+  },
+  "POET": {
+   "round_trips": 1,
+   "pnl": 53.21
+  },
+  "SCCO": {
+   "round_trips": 2,
+   "pnl": 42.3
+  },
+  "NVTS": {
+   "round_trips": 2,
+   "pnl": 21.69
+  },
+  "LTBR": {
+   "round_trips": 3,
+   "pnl": 16.0
+  },
+  "NBIS": {
+   "round_trips": 2,
+   "pnl": -1.56
+  },
+  "KLAC": {
+   "round_trips": 2,
+   "pnl": -28.54
+  },
+  "SBSW": {
+   "round_trips": 3,
+   "pnl": -42.82
+  },
+  "BIDU": {
+   "round_trips": 3,
+   "pnl": -46.99
+  },
+  "TER": {
+   "round_trips": 2,
+   "pnl": -55.24
+  },
+  "STX": {
+   "round_trips": 1,
+   "pnl": -58.66
+  },
+  "VIAV": {
+   "round_trips": 1,
+   "pnl": -59.48
+  },
+  "IBKR": {
+   "round_trips": 1,
+   "pnl": -59.61
+  },
+  "AZN": {
+   "round_trips": 1,
+   "pnl": -61.6
+  },
+  "GOOG": {
+   "round_trips": 1,
+   "pnl": -68.92
+  },
+  "QCOM": {
+   "round_trips": 1,
+   "pnl": -70.44
+  },
+  "IBM": {
+   "round_trips": 1,
+   "pnl": -70.98
+  },
+  "TT": {
+   "round_trips": 1,
+   "pnl": -71.89
+  },
+  "TSEM": {
+   "round_trips": 1,
+   "pnl": -72.25
+  },
+  "WPC": {
+   "round_trips": 1,
+   "pnl": -73.5
+  },
+  "NOK": {
+   "round_trips": 1,
+   "pnl": -77.63
+  },
+  "ASX": {
+   "round_trips": 1,
+   "pnl": -79.67
+  },
+  "A": {
+   "round_trips": 1,
+   "pnl": -80.62
+  },
+  "B": {
+   "round_trips": 1,
+   "pnl": -80.8
+  },
+  "UUUU": {
+   "round_trips": 3,
+   "pnl": -82.41
+  },
+  "AEHR": {
+   "round_trips": 3,
+   "pnl": -84.82
+  },
+  "CRDO": {
+   "round_trips": 1,
+   "pnl": -85.78
+  },
+  "OI": {
+   "round_trips": 3,
+   "pnl": -98.98
+  },
+  "NTES": {
+   "round_trips": 1,
+   "pnl": -101.52
+  },
+  "SNPS": {
+   "round_trips": 1,
+   "pnl": -107.92
+  },
+  "NVO": {
+   "round_trips": 2,
+   "pnl": -110.62
+  },
+  "ANET": {
+   "round_trips": 1,
+   "pnl": -111.27
+  },
+  "FCX": {
+   "round_trips": 1,
+   "pnl": -116.02
+  },
+  "NVDA": {
+   "round_trips": 3,
+   "pnl": -118.04
+  },
+  "MU": {
+   "round_trips": 1,
+   "pnl": -124.83
+  },
+  "BWXT": {
+   "round_trips": 1,
+   "pnl": -128.71
+  },
+  "MPWR": {
+   "round_trips": 1,
+   "pnl": -130.54
+  },
+  "AR": {
+   "round_trips": 3,
+   "pnl": -147.89
+  },
+  "GLD": {
+   "round_trips": 1,
+   "pnl": -148.92
+  },
+  "LITE": {
+   "round_trips": 2,
+   "pnl": -148.98
+  },
+  "TSLA": {
+   "round_trips": 1,
+   "pnl": -158.81
+  },
+  "KC": {
+   "round_trips": 1,
+   "pnl": -159.08
+  },
+  "TTWO": {
+   "round_trips": 2,
+   "pnl": -162.51
+  },
+  "MXL": {
+   "round_trips": 1,
+   "pnl": -173.38
+  },
+  "CIEN": {
+   "round_trips": 2,
+   "pnl": -174.64
+  },
+  "VRT": {
+   "round_trips": 2,
+   "pnl": -183.76
+  },
+  "JD": {
+   "round_trips": 2,
+   "pnl": -186.23
+  },
+  "SE": {
+   "round_trips": 2,
+   "pnl": -198.36
+  },
+  "UMAC": {
+   "round_trips": 1,
+   "pnl": -198.93
+  },
+  "ALAB": {
+   "round_trips": 1,
+   "pnl": -199.95
+  },
+  "OUST": {
+   "round_trips": 1,
+   "pnl": -207.11
+  },
+  "PLTR": {
+   "round_trips": 2,
+   "pnl": -210.6
+  },
+  "CORZ": {
+   "round_trips": 1,
+   "pnl": -211.01
+  },
+  "CEG": {
+   "round_trips": 1,
+   "pnl": -214.97
+  },
+  "CIFR": {
+   "round_trips": 1,
+   "pnl": -222.32
+  },
+  "GFS": {
+   "round_trips": 1,
+   "pnl": -232.49
+  },
+  "NIO": {
+   "round_trips": 3,
+   "pnl": -232.88
+  },
+  "LI": {
+   "round_trips": 2,
+   "pnl": -264.57
+  },
+  "ORCL": {
+   "round_trips": 1,
+   "pnl": -265.58
+  },
+  "ONDS": {
+   "round_trips": 1,
+   "pnl": -266.17
+  },
+  "DOCN": {
+   "round_trips": 2,
+   "pnl": -268.8
+  },
+  "QMCO": {
+   "round_trips": 4,
+   "pnl": -286.47
+  },
+  "SGML": {
+   "round_trips": 1,
+   "pnl": -290.6
+  },
+  "NB": {
+   "round_trips": 1,
+   "pnl": -294.07
+  },
+  "AAP": {
+   "round_trips": 4,
+   "pnl": -304.67
+  },
+  "S": {
+   "round_trips": 1,
+   "pnl": -332.47
+  },
+  "ALB": {
+   "round_trips": 2,
+   "pnl": -334.14
+  },
+  "IONQ": {
+   "round_trips": 2,
+   "pnl": -346.67
+  },
+  "APLD": {
+   "round_trips": 2,
+   "pnl": -358.88
+  },
+  "RKLB": {
+   "round_trips": 2,
+   "pnl": -382.44
+  },
+  "SNDK": {
+   "round_trips": 1,
+   "pnl": -388.08
+  },
+  "PD": {
+   "round_trips": 3,
+   "pnl": -389.29
+  },
+  "ATLX": {
+   "round_trips": 1,
+   "pnl": -400.1
+  },
+  "DQ": {
+   "round_trips": 5,
+   "pnl": -463.63
+  },
+  "U": {
+   "round_trips": 5,
+   "pnl": -532.51
+  },
+  "BE": {
+   "round_trips": 3,
+   "pnl": -548.5
+  },
+  "CSIQ": {
+   "round_trips": 4,
+   "pnl": -621.39
+  },
+  "JKS": {
+   "round_trips": 3,
+   "pnl": -647.94
+  }
+ }
+}

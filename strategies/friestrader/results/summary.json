@@ -1,9 +1,9 @@
 {
  "period": [
   "2021-01-04",
-  "2026-10-28"
+  "2026-10-30"
  ],
- "trading_days": 1462,
+ "trading_days": 1464,
  "pool_size": 172,
  "symbols_with_data": 163,
  "missing_or_short": [
@@ -21,51 +21,51 @@
  "slippage": 0.0005,
  "capital": 10000,
  "strategy": {
-  "total_return": 0.5101,
-  "cagr": 0.0735,
+  "total_return": 0.471,
+  "cagr": 0.0686,
   "max_drawdown": -0.2836,
-  "sharpe": 0.45,
-  "volatility": 0.2071
+  "sharpe": 0.42,
+  "volatility": 0.2074
  },
  "equal_weight_buy_hold": {
-  "total_return": 2.782,
-  "cagr": 0.2572,
+  "total_return": 2.5012,
+  "cagr": 0.2403,
   "max_drawdown": -0.3849,
-  "sharpe": 0.76,
-  "volatility": 0.3999
+  "sharpe": 0.73,
+  "volatility": 0.4007
  },
  "benchmark": {
   "SPY": {
-   "total_return": 1.2573,
-   "cagr": 0.1504,
+   "total_return": 1.2124,
+   "cagr": 0.1462,
    "max_drawdown": -0.245,
-   "sharpe": 0.93,
-   "volatility": 0.1657
+   "sharpe": 0.91,
+   "volatility": 0.1658
   }
  },
- "round_trips": 309,
- "win_rate": 0.427,
- "avg_win": 258.62,
+ "round_trips": 310,
+ "win_rate": 0.429,
+ "avg_win": 258.02,
  "avg_loss": -167.65,
- "avg_hold_days": 27.0,
+ "avg_hold_days": 26.9,
  "exit_reasons": {
-  "take_profit": 207,
-  "stop_loss": 307
+  "take_profit": 208,
+  "stop_loss": 308
  },
  "entry_decisions": {
-  "bought": 311,
-  "max_concurrent_positions": 27617,
-  "entry_extension": 12420,
-  "entry_price_gap": 4195,
-  "sell_reentry_lock": 26761,
+  "bought": 312,
+  "max_concurrent_positions": 27628,
+  "entry_extension": 12421,
+  "entry_price_gap": 4198,
+  "sell_reentry_lock": 26792,
   "wash_sale": 1345,
   "loss_limit_halt": 478
  },
  "loss_limit_halt_days": 8,
  "final_open_positions": [
-  "AI",
   "ARM",
   "QMCO",
+  "TEM",
   "TIC"
  ],
  "per_symbol": {
@@ -149,6 +149,10 @@
    "round_trips": 2,
    "pnl": 292.43
   },
+  "AI": {
+   "round_trips": 3,
+   "pnl": 261.76
+  },
   "PDD": {
    "round_trips": 5,
    "pnl": 259.97
@@ -209,10 +213,6 @@
    "round_trips": 1,
    "pnl": 155.59
   },
-  "AI": {
-   "round_trips": 3,
-   "pnl": 154.36
-  },
   "STM": {
    "round_trips": 3,
    "pnl": 147.94
@@ -256,6 +256,10 @@
   "BILI": {
    "round_trips": 5,
    "pnl": 75.27
+  },
+  "TIC": {
+   "round_trips": 1,
+   "pnl": 72.13
   },
   "AXTI": {
    "round_trips": 1,
@@ -303,7 +307,7 @@
   },
   "TER": {
    "round_trips": 2,
-   "pnl": -55.24
+   "pnl": -55.25
   },
   "STX": {
    "round_trips": 1,
@@ -419,7 +423,7 @@
   },
   "GLD": {
    "round_trips": 1,
-   "pnl": -148.92
+   "pnl": -148.91
   },
   "LITE": {
    "round_trips": 2,
@@ -439,7 +443,7 @@
   },
   "MXL": {
    "round_trips": 1,
-   "pnl": -173.38
+   "pnl": -173.37
   },
   "CIEN": {
    "round_trips": 2,
@@ -511,7 +515,7 @@
   },
   "QMCO": {
    "round_trips": 4,
-   "pnl": -286.47
+   "pnl": -287.49
   },
   "SGML": {
    "round_trips": 1,

@@ -45,7 +45,7 @@ def walk_bar(p,b,path):
     return None
 
 
-def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rule='body5',arm_pct=0.0,stop_info=None):
+def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rule='body5',arm_pct=0.0,stop_info=None,cash0=100000.,start=date(2026,1,1)):
     """arm_pct: close_only breakeven exit arms only once net trade P&L exceeds arm_pct x cost (0 = original rule).
     stop_info: optional {(symbol, entry_date): (swing_low or None, signal_day_low)} -> intraday price stop instead of
     the close-confirmed 2ATR stop: swing low if within 10% of the entry open, else the entry day's low (armed at its
@@ -55,7 +55,7 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
     SECTOR = sector_map if sector_map is not None else globals()['SECTOR']
     groups=sorted(set(SECTOR.values()))
     stats={s:{b.date:(r['ma60'],sma(bs,i,10)) for i,(b,r) in enumerate(zip(bs,indicators(bs)))} for s,bs in data.items()} if exit_rule in ('control','q_ma10') else {}
-    cash=100000.
+    cash=cash0
     pos,last,pending={},{},{}
     rebalance=set()
     fills,trades,curve,exposures,skips=[],[],[],[],[]
@@ -63,7 +63,7 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
     ambiguity=0
     for s,bs in data.items():
         for b in bs:
-            if b.date>=date(2026,1,1):
+            if b.date>=start:
                 days[b.date][s]=b
 
     def sell(s,b,qty,price,reason):
@@ -79,7 +79,7 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
             if abs(pnl)<1e-8:
                 pnl=0.  # Numerical roundoff is not a profitable stock.
             trades.append(dict(symbol=s,sector=SECTOR[s],entry_date=p['entry_date'],exit_date=str(b.date),
-                pnl=pnl,reason=reason))
+                pnl=pnl,reason=reason,entry=p['entry'],qty=p['initial'],ret=pnl/p['cost']))
             del pos[s]
             pending.pop(s,None)
 
@@ -203,13 +203,13 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
     for s in list(pos):
         sell(s,days[final][s],pos[s]['qty'],days[final][s].close,'end_of_test')
     curve[-1]['equity']=cash
-    peak,dd=100000.,0.
+    peak,dd=cash0,0.
     for r in curve:
         peak=max(peak,r['equity'])
         dd=min(dd,r['equity']/peak-1)
-    assert abs(sum(t['pnl'] for t in trades)-(cash-100000))<1e-6
+    assert abs(sum(t['pnl'] for t in trades)-(cash-cash0))<1e-6
     conc,contrib=concentration(trades)
-    summary=dict(total_return=cash/100000-1,max_drawdown=dd,trades=len(trades),
+    summary=dict(total_return=cash/cash0-1,max_drawdown=dd,trades=len(trades),
         win_rate=sum(t['pnl']>0 for t in trades)/len(trades) if trades else 0.,
         mean_exposure=sum(r['exposure'] for r in curve)/len(curve),ambiguous_bars=ambiguity,
         breakeven_exits=sum(t['reason'] in ('breakeven_stop','close_breakeven_exit') for t in trades),gap_exits=sum(t['reason']=='gap_stop' for t in trades),

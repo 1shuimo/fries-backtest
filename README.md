@@ -17,13 +17,20 @@
 │   │   └── results/          # Actions 跑完自动提交
 │   └── quant/                # B1/KDJ、322、Qullamaggie 等研究引擎（Codex 写，见其 README）
 │       ├── run_ytd_yahoo.py  # 用共用缓存重跑 2026 年 B1 系列策略
-│       └── ytd_experiments.py# 7 月 / 10 月回撤的改进实验
+│       ├── ytd_experiments.py# 7 月 / 10 月回撤的改进实验
+│       └── monitor/          # 每日盯盘：B1+MA60+第3天检查的买入/止损/卖出提醒（见其 README）
 ├── tests/                    # FriesTrader 引擎测试；quant 的测试在 strategies/quant/tests
 ├── docs/RESULTS.md           # 已完成回测的结论汇总
-└── .github/workflows/backtest.yml
+└── .github/workflows/        # backtest.yml（回测）、daily-monitor.yml（每个交易日收盘后盯盘，开 Issue 提醒）
 ```
 
 两套引擎的成交口径、仓位规则都不同，**结果不能直接互相比较或相加**。
+
+## 每日盯盘提醒
+
+`strategies/quant/monitor/`：每个美股交易日收盘后，Actions 自动扫描 `pool.txt`，按 B1+MA60+第3天检查 的规则
+列出「明早可买 + 建议股数 + 止损价（前低≤10%，否则买入日低点）」和「持仓明早该卖多少」，写入 `monitor/reports/` 并开 Issue @ 你。
+买卖后在 `monitor/positions.csv` 更新持仓、在 `monitor/config.json` 填账户净值。**只提醒，不下单。**
 
 ## 常用命令
 

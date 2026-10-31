@@ -397,6 +397,17 @@ def report(asof, equity, positions, cands, cash_left, sectors, missing, stale):
     return '\n'.join(L)
 
 
+def summary(asof, positions, cands):
+    """One line for push channels, e.g. '盯盘10-30：卖0 买1 | 买 RGC 2237股 止损6.50(前低)'."""
+    sells = [p for p in positions if p.action in FULL_EXIT + ('body5',) and p.sell_qty]
+    buys = [c for c in cands if c['qty']]
+    parts = [f"盯盘{asof:%m-%d}：卖{len(sells)} 买{len(buys)}"]
+    parts += [f"卖 {p.symbol} {p.sell_qty}股" for p in sells]
+    parts += [f"买 {c['symbol']} {c['qty']}股 止损" + (f"{c['stop']:.2f}(前低)" if c['stop'] is not None else '买入日低点')
+              for c in buys]
+    return ' | '.join(parts)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--data', default=str(REPO / 'data'))
@@ -404,6 +415,7 @@ def main():
     ap.add_argument('--positions', default=str(HERE / 'positions.csv'))
     ap.add_argument('--config', default=str(HERE / 'config.json'))
     ap.add_argument('--out', help='write report to this file as well')
+    ap.add_argument('--summary-out', help='write a one-line summary (for push notifications) to this file')
     ap.add_argument('--require-date', help='exit 3 without report if the data does not reach this date (market holiday)')
     a = ap.parse_args()
     data_dir = Path(a.data)
@@ -442,6 +454,8 @@ def main():
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(text + '\n')
+    if a.summary_out:
+        Path(a.summary_out).write_text(summary(asof, positions, cands) + '\n')
 
 
 if __name__ == '__main__':

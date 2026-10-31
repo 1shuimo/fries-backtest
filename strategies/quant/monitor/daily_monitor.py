@@ -1,15 +1,14 @@
-#!/usr/bin/env python3
-"""Daily action list for B1+MA60+day-3 check (the best 2026 YTD variant in docs/RESULTS.md).
+"""Daily action list for B1+MA60+day-3 check (the best 2026 YTD variant in docs/RESULTS.md),
+with the user's stop: previous swing low if within 10% of entry, else the buy day's low (intraday stop order).
 
-Mirrors sector_b1.simulate(path='close_only', check_day=3, exit_rule='body5'):
+Mirrors sector_b1.simulate(path='close_only', check_day=3, exit_rule='body5', stop_info=...):
   buy   : close J(9,3,3) < 12 and close > SMA60 -> buy next open; not already held.
-  size  : min(equity*0.5% / (2*ATR20), equity*20%, cash, sector room to 30%).
-  exits : all decided on the close, executed next open, priority in this order:
-          close <= entry-2*ATR (fixed)          -> sell all
+  size  : min(equity*0.5% / stop distance, equity*20%, cash, sector room to 30%).
+  stop  : intraday price stop, fixed; gap below it fills at the open.
+  exits : decided on the close, executed next open, in this order:
           once net P&L > 0 at a close, net <= 0 -> sell all (breakeven)
           day 3 (entry day = 1) net <= 0        -> sell all
           close/open-1 >= 5%                    -> sell 1/3 of initial (cumulative 1/3, 2/3, all)
-          sector > 30% of equity at close       -> trim largest holding next open
 Read-only. Prints a Markdown report; never places orders.
 """
 import argparse
@@ -60,6 +59,24 @@ def load_pool(path=POOL):
     return sectors
 
 
+MAX_STOP_PCT, PIVOT_K, PIVOT_LOOKBACK = .10, 3, 60
+
+
+def swing_low(bars, i, k=PIVOT_K, lookback=PIVOT_LOOKBACK):
+    """Previous swing low of the uptrend as seen on signal bar i: the most recent confirmed pivot low
+    (lowest low of the k bars either side, all on or before bar i) that lies below bar i's low."""
+    for p in range(i - k, max(k, i - lookback) - 1, -1):
+        lo = bars[p].low
+        if lo < bars[i].low and lo <= min(x.low for x in bars[p - k:p + k + 1]):
+            return lo
+    return None
+
+
+def pick_stop(entry, swing):
+    """Swing low if it is below entry and within 10%; otherwise None = use the buy day's low."""
+    return swing if swing is not None and 0 < entry - swing <= MAX_STOP_PCT * entry else None
+
+
 def load_bars(path, symbol, asof=None):
     bars = []
     with open(path, newline='') as f:
@@ -86,7 +103,10 @@ class Position:
     qty: int
     sold_proceeds: float | None = None
     # filled by replay
+    stop_override: float | None = None
     stop: float = math.nan
+    stop_kind: str = ''
+    swing: float | None = None
     atr: float = math.nan
     held: int = 0
     armed: bool = False
@@ -115,15 +135,15 @@ def read_positions(path):
             initial = int(float(r['initial_qty']))
             qty = int(float(r.get('qty') or initial))
             sp = (r.get('sold_proceeds') or '').strip()
+            st = (r.get('stop') or '').strip()
             out.append(Position(r['symbol'].strip().upper(), date.fromisoformat(r['entry_date'].strip()),
-                                float(r['entry_price']), initial, qty, float(sp) if sp else None))
+                                float(r['entry_price']), initial, qty, float(sp) if sp else None,
+                                float(st) if st else None))
     return out
 
 
 def close_decision(p, bar, net):
-    """Same if/elif order as sector_b1.simulate close_only. Returns pending action or None."""
-    if bar.close <= p.stop:
-        return 'stop'
+    """Same if/elif order as sector_b1.simulate close_only (price stop is intraday, handled separately)."""
     if p.armed and net <= 0:
         return 'breakeven'
     if p.held == CHECK_DAY and net <= 0:
@@ -134,37 +154,60 @@ def close_decision(p, bar, net):
 
 
 def replay(p, bars):
-    """Replay the rules from entry to the last bar, as if every rule sale was executed at the next open.
-    Then reconcile with the user's actual remaining qty / proceeds for today's decision."""
+    """Replay the rules from entry to the last bar (rule sales at the next open, price stop intraday),
+    mirroring sector_b1.simulate(stop_info=...). Then reconcile with the user's actual qty / proceeds."""
     dates = [b.date for b in bars]
     if p.entry_date not in dates:
         p.notes.append(f'没有 {p.entry_date} 的日线，无法复盘，请检查买入日期')
         p.action = 'check'
         return p
     i0 = dates.index(p.entry_date)
-    if i0 == 0:
-        p.notes.append('买入前历史不足，无法计算 ATR')
+    if i0 <= PIVOT_K:
+        p.notes.append('买入前历史不足，无法找前低')
         p.action = 'check'
         return p
     p.atr = indicators(bars)[i0 - 1]['atr']
-    p.stop = p.entry_price - 2 * p.atr
+    if p.stop_override is not None:
+        p.stop, p.stop_kind = p.stop_override, '手动设定'
+    else:
+        p.swing = swing_low(bars, i0 - 1)
+        chosen = pick_stop(p.entry_price, p.swing)
+        if chosen is not None:
+            p.stop, p.stop_kind = chosen, '前低'
+        else:
+            p.stop, p.stop_kind = bars[i0].low, '买入日最低价'
+    stop_live = p.stop_kind != '买入日最低价'   # day-low stop only exists after the entry day closes
     sim_qty, pending, exited = p.initial, None, None
+
+    def sell(bar, q, price, why):
+        nonlocal sim_qty, exited
+        p.realized += q * price * (1 - FEE)
+        sim_qty -= q
+        if q:
+            p.sim_fills.append((bar.date, q))
+        if not sim_qty:
+            exited = (bar.date, why)
+
     for bar in bars[i0:]:
-        if pending is not None and bar.date > p.entry_date:
-            if isinstance(pending, int):
-                target = math.floor(p.initial * pending / 3 + 1e-9)
-                q = max(0, min(sim_qty, target - (p.initial - sim_qty)))
-                p.stage = pending
-            else:
-                q = sim_qty
-            p.realized += q * bar.open * (1 - FEE)
-            sim_qty -= q
-            if q:
-                p.sim_fills.append((bar.date, q))
-            if not sim_qty:
-                exited = (bar.date, pending)
+        if bar.date > p.entry_date:
+            if bar.open <= p.stop:
+                sell(bar, sim_qty, bar.open, 'stop')
                 break
-            pending = None
+            if pending is not None:
+                if isinstance(pending, int):
+                    target = math.floor(p.initial * pending / 3 + 1e-9)
+                    q = max(0, min(sim_qty, target - (p.initial - sim_qty)))
+                    p.stage = pending
+                else:
+                    q = sim_qty
+                sell(bar, q, bar.open, pending)
+                if exited:
+                    break
+                pending = None
+        if stop_live and bar.low <= p.stop:
+            sell(bar, sim_qty, min(bar.open, p.stop), 'stop')
+            break
+        stop_live = True
         p.held += 1
         net = p.realized + sim_qty * bar.close * (1 - FEE) - p.cost
         pending = close_decision(p, bar, net)
@@ -183,8 +226,12 @@ def replay(p, bars):
     p.stage = max(p.stage if not exited else 0, min(3, round(actual_sold / p.initial * 3)))
     p.net = p.realized + p.qty * last.close * (1 - FEE) - p.cost
     if exited and p.qty:
-        reason = {'stop': '收盘跌破止损', 'breakeven': '盈转亏', 'day3': '第3天未盈利'}.get(exited[1], '分批卖完')
-        p.notes.append(f'按规则 {exited[0]} 开盘已应清仓（{reason}），你还持有 {p.qty} 股')
+        if exited[1] == 'stop':
+            p.notes.append(f'{exited[0]} 盘中已跌到止损价 {p.stop:.2f}——如果止损单已成交请更新 positions.csv；'
+                           f'如果没设止损单、仍持有 {p.qty} 股，按规则应立即卖出')
+        else:
+            reason = {'breakeven': '盈转亏', 'day3': '第3天未盈利'}.get(exited[1], '分批卖完')
+            p.notes.append(f'按规则 {exited[0]} 开盘已应清仓（{reason}），你还持有 {p.qty} 股')
         p.action, p.sell_qty = 'overdue', p.qty
         return p
     if not p.qty:
@@ -192,10 +239,10 @@ def replay(p, bars):
     # today's decision with actual numbers (armed history from replay)
     if exited:
         p.armed = True
-    decision = close_decision(p, last, p.net) if last.date >= p.entry_date else None
+    decision = close_decision(p, last, p.net)
     if p.net > 0:
         p.armed = True
-    if decision in ('stop', 'breakeven', 'day3'):
+    if decision in ('breakeven', 'day3'):
         p.action, p.sell_qty = decision, p.qty
     elif isinstance(decision, int):
         target = math.floor(p.initial * decision / 3 + 1e-9) if decision < 3 else p.initial
@@ -222,8 +269,13 @@ def scan(data, sectors):
         if not all(math.isfinite(v) for v in (j[-1], r['ma60'], r['atr'])) or r['atr'] <= 0:
             continue
         if j[-1] < 12 and b.close > r['ma60']:
+            sw = swing_low(bars, len(bars) - 1)
+            stop = pick_stop(b.close, sw)
+            # Day-low fallback: the stop is unknown until tomorrow's close; size on today's low as an estimate.
+            dist = b.close - stop if stop is not None else max(b.close - b.low, .01 * b.close)
             rows.append(dict(symbol=s, sector=sectors.get(s, '其他'), close=b.close, j=j[-1], ma60=r['ma60'],
-                             atr=r['atr'], new=not (j[-2] < 12 and bars[-2].close > st[-2]['ma60'])))
+                             atr=r['atr'], swing=sw, stop=stop, dist=dist, low=b.low,
+                             new=not (j[-2] < 12 and bars[-2].close > st[-2]['ma60'])))
     return sorted(rows, key=lambda r: r['symbol'])
 
 
@@ -247,7 +299,7 @@ def size_candidates(cands, positions, equity, sectors, prices):
         if c['symbol'] in held:
             c['qty'], c['why'] = 0, '已持有，不加仓'
             continue
-        px, dist = c['close'], 2 * c['atr']
+        px, dist = c['close'], c['dist']
         room = max(0., (SECTOR_CAP * equity - sector_val[c['sector']]) / (1 + SECTOR_CAP * FEE))
         limits = {'风险0.5%': equity * RISK / (dist + 2 * px * FEE), '单票20%': equity * MAX_POS / (px * (1 + FEE)),
                   '现金': max(0., cash) / (px * (1 + FEE)), '行业30%': room / px}
@@ -262,66 +314,81 @@ def size_candidates(cands, positions, equity, sectors, prices):
     return cands, cash
 
 
-FULL_EXIT = ('stop', 'breakeven', 'day3', 'overdue')
+FULL_EXIT = ('breakeven', 'day3', 'overdue')
 ACTION_TEXT = {
-    'stop': '🔴 明早开盘全部卖出：收盘跌破止损',
     'breakeven': '🔴 明早开盘全部卖出：曾盈利、现在整笔转亏（保本退出）',
     'day3': '🔴 明早开盘全部卖出：第3天收盘仍未盈利',
-    'overdue': '🔴 明早开盘全部卖出：规则早已触发清仓',
+    'overdue': '🔴 立即全部卖出：规则已触发清仓',
     'body5': '🟡 明早开盘分批止盈：今天大阳线（收盘/开盘 ≥ 5%）',
-    'hold': '🟢 继续持有',
+    'hold': '🟢 继续持有，止损单保持',
     'check': '⚠️ 数据有问题，请检查 positions.csv',
 }
+
+
+def fmt_swing(c):
+    if c['swing'] is None:
+        return '近60日无前低'
+    return f"{c['swing']:.2f}（−{1 - c['swing'] / c['close']:.1%}）"
 
 
 def report(asof, equity, positions, cands, cash_left, sectors, missing, stale):
     L = [f'# 盯盘提醒 {asof}（B1 + MA60 + 第3天检查）', '',
          f'数据：{asof} 收盘（Yahoo 复权日线）。账户净值设定 ${equity:,.0f}（改 `monitor/config.json`）。',
-         '所有动作都是**下一个交易日开盘**执行。只是规则提醒，不是投资建议。', '']
+         '买入、分批卖出、保本/第3天卖出都在**下一个交易日开盘**执行；**止损是富途止损单（盘中触价即卖）**。'
+         '只是规则提醒，不是投资建议。', '']
     L += ['## 一、持仓操作', '']
     if not positions:
         L += ['`monitor/positions.csv` 里没有持仓。买入后记得填上，否则无法提醒止损和卖出。', '']
     for p in positions:
         L.append(f"### {p.symbol}　{ACTION_TEXT.get(p.action, p.action)}")
-        if p.action in ('stop', 'breakeven', 'day3', 'overdue', 'body5') and p.sell_qty:
+        if p.action in FULL_EXIT + ('body5',) and p.sell_qty:
             L.append(f'- **卖出 {p.sell_qty} 股**（剩余 {p.qty - p.sell_qty} 股）')
         if p.action != 'check':
             be = breakeven_price(p)
             L += [f'- 买入 {p.entry_date} @ {p.entry_price:.2f}，最初 {p.initial} 股，现 {p.qty} 股；今收 {p.close:.2f}',
                   f'- 整笔盈亏（含已卖、含费）：{p.net:+,.0f} 美元（{p.net / p.cost:+.1%}）；持有第 {p.held} 天',
-                  f'- 止损线（收盘价 ≤ 即卖）：**{p.stop:.2f}**（买入价 − 2×ATR {p.atr:.2f}，固定不动）']
+                  f'- **止损单：{p.stop:.2f}**（{p.stop_kind}，距买入价 −{1 - p.stop / p.entry_price:.1%}，固定不动）']
             if p.action in FULL_EXIT:
                 pass
             elif p.armed:
-                L.append(f'- 保本线已启用：收盘价 ≤ **{be:.2f}** 即整笔不赚钱 → 次日全卖')
+                L.append(f'- 保本线已启用：收盘价 ≤ **{be:.2f}** 即整笔不赚钱 → 次日开盘全卖')
             else:
                 L.append(f'- 保本线未启用（尚未有收盘盈利）；盈利后收盘价跌回 {be:.2f} 以下即全卖')
             if p.held < CHECK_DAY and p.action not in FULL_EXIT:
-                L.append(f'- 第 {CHECK_DAY} 天收盘若整笔仍 ≤ 0（收盘价 ≤ {be:.2f}）→ 次日全卖')
+                L.append(f'- 第 {CHECK_DAY} 天收盘若整笔仍 ≤ 0（收盘价 ≤ {be:.2f}）→ 次日开盘全卖')
             if p.stage < 3 and p.action not in FULL_EXIT:
                 nxt = math.floor(p.initial * (p.stage + 1) / 3 + 1e-9) - (p.initial - p.qty)
                 L.append(f'- 已分批 {p.stage}/3；下一根大阳线（收盘/开盘 ≥ 5%）→ 次日开盘再卖约 {max(nxt, 0)} 股')
         L += [f'- ⚠️ {n}' for n in p.notes] + ['']
     L += ['## 二、明早可以买入', '']
-    buys = [c for c in cands if c['qty']]
     if not cands:
         L += ['今天清单里没有满足 J<12 且站上 MA60 的股票。', '']
     else:
-        L += ['| 代码 | 行业 | 今收 | J | 高于MA60 | ATR20 | 建议股数 | 约占净值 | 止损价（开盘价−2ATR，按今收估） | 首个止损距离 |',
-              '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|']
+        L += ['| 代码 | 行业 | 今收 | J | 高于MA60 | 前低 | 止损 | 止损幅度 | 建议股数 | 约占净值 | 最大亏损 |',
+              '|---|---|---:|---:|---:|---:|---|---:|---:|---:|---:|']
         for c in cands:
-            q = f"{c['qty']}（{c['why']}）" if c['qty'] else f"— {c['why']}"
+            q = f"**{c['qty']}**（{c['why']}）" if c['qty'] else f"— {c['why']}"
+            if c['stop'] is not None:
+                stop = f"**{c['stop']:.2f}**（前低）"
+                pct = f"{c['dist'] / c['close']:.1%}"
+            else:
+                stop = '买入当天最低价（前低超10%）'
+                pct = f"约{c['dist'] / c['close']:.1%}?"
             L.append(f"| {c['symbol']}{' 🆕' if c['new'] else ''} | {c['sector']} | {c['close']:.2f} | {c['j']:.1f} | "
-                     f"{c['close'] / c['ma60'] - 1:+.1%} | {c['atr']:.2f} | {q} | "
-                     f"{c['qty'] * c['close'] / equity:.1%} | {c['close'] - 2 * c['atr']:.2f} | {2 * c['atr'] / c['close']:.1%} |")
-        L += ['', f"🆕 = 今天首次满足条件；其他是连续第 N 天满足（回测里同样会买）。按代码字母顺序分配现金（与回测一致），"
-              f"买完约剩现金 ${cash_left:,.0f}。",
-              '**实际止损价 = 你的实际成交价 − 2×ATR20（上表 ATR）**，记进 positions.csv 后报告会每天跟踪。', '']
-        if not buys:
-            L += ['（全部因现金/行业/已持有限制无法买入）', '']
+                     f"{c['close'] / c['ma60'] - 1:+.1%} | {fmt_swing(c)} | {stop} | {pct} | {q} | "
+                     f"{c['qty'] * c['close'] / equity:.1%} | ${c['qty'] * c['dist']:,.0f} |")
+        L += ['', '怎么操作：',
+              '1. 明天开盘买入上表股数（股数按今收估算；若开盘价偏离今收较多，按 净值×0.5% ÷ (开盘价−止损价) 重算，且不超过净值 20%）。',
+              '2. 有前低的：成交后立刻在富途挂**止损单**（触发价 = 表中止损价）。',
+              '3. 「买入当天最低价」的：收盘后把当天最低价设为止损单；明天的报告会给出准确价格。'
+              '（股数是按今天振幅估的，若买入当天振幅很大，实际风险会高于 0.5%。）',
+              '4. 把成交价、股数填进 `monitor/positions.csv`，之后每天的报告会跟踪止损、保本、第3天和分批止盈。', '',
+              f"🆕 = 今天首次满足条件；其他是连续第 N 天满足（回测里同样会买）。按代码字母顺序分配现金（与回测一致），"
+              f"买完约剩现金 ${cash_left:,.0f}。", '']
     L += ['## 三、规则速查', '',
-          '- 买：收盘 J(9,3,3)<12 且 收盘>MA60 → 次日开盘买。单笔风险 0.5%（按 2×ATR 止损距离），单票 ≤20%，单行业 ≤30%。',
-          '- 止损：收盘 ≤ 买入价−2×ATR20 → 次日开盘全卖（不是盘中触价；跳空可能多亏）。',
+          '- 买：收盘 J(9,3,3)<12 且 收盘>MA60 → 次日开盘买。单笔最大亏损 = 净值 0.5%（股数 = 0.5%净值 ÷ 止损距离），单票 ≤20%，单行业 ≤30%。',
+          '- 止损（盘中止损单，固定不动）：上涨趋势的前一个低点（买入价下方 10% 以内）；超过 10% 或没有前低则用买入当天的最低价。'
+          '跳空低开到止损价下方会按开盘价成交。',
           '- 保本：任一收盘整笔赚钱后，再出现收盘整笔不赚钱 → 次日开盘全卖。',
           '- 第3天：买入日算第1天，第3天收盘整笔不赚钱 → 次日开盘全卖。',
           '- 止盈：大阳线 收盘/开盘−1 ≥ 5% → 次日开盘卖最初股数 1/3；第2根到 2/3；第3根清仓。', '']

@@ -45,8 +45,11 @@ def walk_bar(p,b,path):
     return None
 
 
-def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rule='body5',arm_pct=0.0):
-    """arm_pct: close_only breakeven exit arms only once net trade P&L exceeds arm_pct x cost (0 = original rule)."""
+def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rule='body5',arm_pct=0.0,stop_info=None):
+    """arm_pct: close_only breakeven exit arms only once net trade P&L exceeds arm_pct x cost (0 = original rule).
+    stop_info: optional {(symbol, entry_date): (swing_low or None, signal_day_low)} -> intraday price stop instead of
+    the close-confirmed 2ATR stop: swing low if within 10% of the entry open, else the entry day's low (armed at its
+    close; sized on the signal-day low). Breakeven/day-N/body5 exits stay close-confirmed."""
     assert path in ('high_first','low_first','close_only')
     assert exit_rule in ('body5','322','control','q_ma10')
     SECTOR = sector_map if sector_map is not None else globals()['SECTOR']
@@ -92,7 +95,7 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
             if s not in today:
                 continue
             p,b=pos[s],today[s]
-            if path!='close_only' and b.open<=p['stop']:
+            if (path!='close_only' or stop_info is not None) and b.open<=p['stop']:
                 sell(s,b,p['qty'],b.open,'gap_stop')
             elif s in pending:
                 action=pending.pop(s)
@@ -127,13 +130,22 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
             eq=equity()
             room=max(0,(.30*eq-value(SECTOR[s]))/(1+.30*FEE))
             distance=2*c.atr
+            stop_px,day_low_stop=b.open-distance,False
+            if stop_info is not None:
+                swing,signal_low=stop_info.get((s,day),(None,b.open))
+                if swing is not None and 0<b.open-swing<=.10*b.open:
+                    stop_px=swing
+                    distance=b.open-swing
+                else:
+                    stop_px,day_low_stop=-math.inf,True
+                    distance=max(b.open-signal_low,.01*b.open)
             qty=math.floor(min(eq*.005/(distance+2*b.open*FEE),eq*.20/(b.open*(1+FEE)),cash/(b.open*(1+FEE)),room/b.open))
             if qty<1 or distance>=b.open:
                 skips.append(dict(date=str(day),symbol=s,reason='cash_sector_or_size'))
                 continue
             cost=qty*b.open*(1+FEE)
             cash-=cost
-            pos[s]=dict(qty=qty,initial=qty,cost=cost,realized=0.,stop=b.open-distance,armed=False,
+            pos[s]=dict(qty=qty,initial=qty,cost=cost,realized=0.,stop=stop_px,day_low_stop=day_low_stop,armed=False,
                 stage=0,held=0,entry=b.open,strategy=c.strategy,entry_date=str(day))
             fills.append(dict(date=str(day),symbol=s,side='buy',qty=qty,price=b.open,reason=c.strategy))
             assert value(SECTOR[s])<=.30*equity()+1e-6
@@ -145,12 +157,16 @@ def simulate(data,signals,check_day=2,path='high_first',sector_map=None,exit_rul
             if path!='close_only' and not p['armed'] and b.open<=be<b.high and b.low<=be:
                 ambiguity+=1
             hit=walk_bar(p,b,path) if path!='close_only' else None
+            if stop_info is not None and not hit and b.low<=p['stop']:
+                hit=(min(b.open,p['stop']),'price_stop')
+            if stop_info is not None and p.pop('day_low_stop',False) and not hit:
+                p['stop']=b.low
             if hit:
                 sell(s,b,p['qty'],hit[0],hit[1])
                 continue
             p['held']+=1
             net=p['realized']+p['qty']*b.close*(1-FEE)-p['cost']
-            if path=='close_only' and b.close<=p['stop']:
+            if path=='close_only' and stop_info is None and b.close<=p['stop']:
                 pending[s]='close_atr_stop'
             elif path=='close_only' and p['armed'] and net<=0:
                 pending[s]='close_breakeven_exit'

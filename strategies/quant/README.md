@@ -14,6 +14,7 @@
 | `compare_stock_strategies.py` | 正股策略及盈利集中度对比 |
 | `leveraged_research.py` / `korea_leveraged.py` | 历史杠杆产品实验；不是最新正股组合的一部分 |
 | `scan_current_b1.py` | 固定 2026-10-27 完整日线筛选快照，不是实时盯盘服务 |
+| `monitor/daily_monitor.py` | 每日盯盘：B1+MA60+第3天检查的买入候选、止损价、持仓卖出动作；由 `daily-monitor.yml` 每个交易日运行 |
 
 ### 最新合并池实验口径
 

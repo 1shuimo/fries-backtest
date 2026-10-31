@@ -1,0 +1,71 @@
+name: daily-monitor
+
+# Every US trading day after the close: download pool prices, run the B1+MA60+day-3 checklist,
+# commit the report and open an issue that @-mentions the repo owner (GitHub mobile push).
+on:
+  schedule:
+    - cron: "15 22 * * 1-5"   # 22:15 UTC = 17:15/18:15 New York, ~06:15 Beijing next morning
+  workflow_dispatch:
+    inputs:
+      asof:
+        description: "Data date YYYY-MM-DD (blank = today in New York)"
+        default: ""
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: daily-monitor
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance pandas
+      - name: Monitor tests
+        run: cd strategies/quant && python -m unittest tests.test_daily_monitor
+      - name: Trading date
+        id: day
+        run: |
+          d="${{ inputs.asof }}"
+          echo "date=${d:-$(TZ=America/New_York date +%F)}" >> "$GITHUB_OUTPUT"
+      - name: Download prices (pool + held symbols)
+        run: |
+          cp strategies/friestrader/pool.txt /tmp/pool.txt
+          tail -n +2 strategies/quant/monitor/positions.csv | cut -d, -f1 >> /tmp/pool.txt
+          python tools/fetch_yahoo.py --pool /tmp/pool.txt --start 2025-01-01
+      - name: Build report
+        id: report
+        run: |
+          set +e
+          out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
+          python strategies/quant/monitor/daily_monitor.py --asof "${{ steps.day.outputs.date }}" \
+            --require-date "${{ steps.day.outputs.date }}" --out "$out"
+          code=$?
+          if [ $code -eq 3 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "out=$out" >> "$GITHUB_OUTPUT"
+          exit $code
+      - name: Commit report
+        if: steps.report.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add strategies/quant/monitor/reports/
+          git commit -m "Daily monitor ${{ steps.day.outputs.date }} [skip ci]" || echo "nothing to commit"
+          git push
+      - name: Notify via issue
+        if: steps.report.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f="${{ steps.report.outputs.out }}"
+          buys=$(grep -c '^| [A-Z].*（' "$f" || true)
+          sells=$(grep -c '^### .*🔴\|^### .*🟡' "$f" || true)
+          { echo "@${{ github.repository_owner }}"; echo; cat "$f"; } > /tmp/body.md
+          gh issue create --title "盯盘 ${{ steps.day.outputs.date }}：卖出/止盈 ${sells} 只，可买 ${buys} 只" --body-file /tmp/body.md

@@ -6,8 +6,21 @@
 每个美股交易日收盘后（北京时间早上约 6:15），GitHub Actions 会：
 1. 下载 `strategies/friestrader/pool.txt`（你的富途自选）全部日线；
 2. 运行 `daily_monitor.py`；
-3. 把报告写进 `monitor/reports/日期.md`，并开一个 GitHub Issue 并 @ 你（GitHub 邮件 / App 推送）。
-另有一个 Claude 定时任务在北京时间早上读这份报告，推送和邮件一份中文摘要。
+3. 把报告写进 `monitor/reports/日期.md`，并通过 `tools/notify.py` 推送给你（见下）。
+另有一个 Claude 定时任务在北京时间早上读这份报告，在 Claude 里推送一份中文摘要。
+
+## 通知渠道（任选一个或多个，在 GitHub 仓库 Settings → Secrets and variables → Actions → New repository secret 添加）
+
+| 渠道 | 需要添加的 Secret | 怎么拿 |
+|---|---|---|
+| 微信（Server酱） | `SERVERCHAN_KEY` | https://sct.ftqq.com 微信扫码登录 → SendKey |
+| 微信（PushPlus） | `PUSHPLUS_TOKEN` | https://www.pushplus.plus 微信扫码登录 → 一对一推送 token |
+| iPhone 推送（Bark） | `BARK_URL` | App Store 装 Bark → 复制 `https://api.day.app/xxxx` |
+| 邮件 | `SMTP_HOST` `SMTP_USER` `SMTP_PASS` `MAIL_TO`（可选 `SMTP_PORT`，默认 465） | QQ 邮箱：`smtp.qq.com`，设置→账户→开启 SMTP 得到授权码填 `SMTP_PASS`；Gmail：`smtp.gmail.com` + 应用专用密码 |
+| Telegram | `TELEGRAM_BOT_TOKEN` `TELEGRAM_CHAT_ID` | @BotFather 建 bot |
+
+微信/邮件收到完整报告；Bark 收到一行摘要（点开跳到完整报告）。一个渠道失败不影响其他渠道。
+配好后在 Actions → daily-monitor → Run workflow 手动跑一次（asof 填最近交易日）即可测试。
 
 ## 你需要维护的两个文件
 

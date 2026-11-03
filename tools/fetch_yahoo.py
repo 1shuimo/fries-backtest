@@ -24,7 +24,11 @@ for s in syms:
             df = yf.download(s, start=a.start, auto_adjust=True, progress=False, multi_level_index=False)
             if df is None or df.empty:
                 raise ValueError("empty")
-            df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+            df = df[["Open", "High", "Low", "Close", "Volume"]]
+            # Yahoo often leaves the latest session's Volume empty for a while after the close;
+            # dropping that row made the whole pool look a day old. Keep it, volume 0.
+            df = df.dropna(subset=["Open", "High", "Low", "Close"])
+            df["Volume"] = df["Volume"].fillna(0)
             df.index.name = "Date"
             df.to_csv(os.path.join(a.out, f"{s}.csv"), date_format="%Y-%m-%d")
             print(f"{s}: {len(df)} rows")

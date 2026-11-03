@@ -60,6 +60,13 @@ def load_pool(path=POOL):
 
 
 MAX_STOP_PCT, PIVOT_K, PIVOT_LOOKBACK = .10, 3, 60
+FRESH_MIN = .90  # share of the pool that must have today's bar before a report is trusted
+NYSE_HOLIDAYS = {  # full-day closures
+    '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25', '2026-06-19', '2026-07-03',
+    '2026-09-07', '2026-11-26', '2026-12-25',
+    '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31', '2027-06-18', '2027-07-05',
+    '2027-09-06', '2027-11-25', '2027-12-24',
+}
 
 
 def swing_low(bars, i, k=PIVOT_K, lookback=PIVOT_LOOKBACK):
@@ -393,7 +400,7 @@ def report(asof, equity, positions, cands, cash_left, sectors, missing, stale):
           '- 第3天：买入日算第1天，第3天收盘整笔不赚钱 → 次日开盘全卖。',
           '- 止盈：大阳线 收盘/开盘−1 ≥ 5% → 次日开盘卖最初股数 1/3；第2根到 2/3；第3根清仓。', '']
     if missing or stale:
-        L += [f'数据缺失：{", ".join(missing) or "无"}；未更新到 {asof}：{", ".join(stale) or "无"}', '']
+        L += [f'没有行情文件：{", ".join(missing) or "无"}；行情没有 {asof} 这一天（停牌、退市或新上市）：{", ".join(stale) or "无"}', '']
     return '\n'.join(L)
 
 
@@ -416,7 +423,9 @@ def main():
     ap.add_argument('--config', default=str(HERE / 'config.json'))
     ap.add_argument('--out', help='write report to this file as well')
     ap.add_argument('--summary-out', help='write a one-line summary (for push notifications) to this file')
-    ap.add_argument('--require-date', help='exit 3 without report if the data does not reach this date (market holiday)')
+    ap.add_argument('--require-date', help='exit 3 if this date is a NYSE holiday, 4 if under 90%% of the pool has a bar '
+                    'for it yet (Yahoo not updated); no report in either case')
+    ap.add_argument('--check-only', action='store_true', help='with --require-date: only check data freshness')
     a = ap.parse_args()
     data_dir = Path(a.data)
     sectors = load_pool()
@@ -425,9 +434,18 @@ def main():
         sectors.setdefault(p.symbol, '其他')
     asof = date.fromisoformat(a.asof) if a.asof else max(
         load_bars(data_dir / f'{s}.csv', s)[-1].date for s in ('SPY', 'NVDA') if (data_dir / f'{s}.csv').exists())
-    if a.require_date and str(asof) != a.require_date:
-        print(f'latest data {asof} != {a.require_date}; market closed or data not updated', file=sys.stderr)
-        sys.exit(3)
+    if a.require_date:
+        want = date.fromisoformat(a.require_date)
+        if want.weekday() >= 5 or str(want) in NYSE_HOLIDAYS:
+            print(f'{want} is not a NYSE trading day', file=sys.stderr)
+            sys.exit(3)
+        have = [s for s in sectors if (data_dir / f'{s}.csv').exists()]
+        fresh = sum(1 for s in have if any(b.date == want for b in load_bars(data_dir / f'{s}.csv', s)[-5:]))
+        print(f'data freshness for {want}: {fresh}/{len(have)} symbols have the bar', file=sys.stderr)
+        if fresh < FRESH_MIN * len(have):
+            sys.exit(4)
+        if a.check_only:
+            sys.exit(0)
     data, missing, stale = {}, [], []
     for s in sectors:
         f = data_dir / f'{s}.csv'

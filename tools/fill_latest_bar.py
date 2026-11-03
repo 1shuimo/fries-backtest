@@ -4,11 +4,11 @@
 Yahoo's daily endpoint sometimes lags for hours after the close (2026-11-02: 160 of 163 symbols
 had no bar by 21:13 New York). For each data/<SYM>.csv without a row for --date, try in order:
   1. yahoo-intraday : Yahoo 30-minute bars for that session, aggregated to one daily bar
-  2. stooq          : stooq.com daily CSV
-  3. nasdaq         : api.nasdaq.com historical quotes
+  2. nasdaq         : api.nasdaq.com historical quotes
+(stooq.com is available with --sources but blocks scripts behind a browser check.)
 and append the first complete bar found. Only the one missing day is added; history stays Yahoo's.
 Writes <out>/_fallback.json = {"date": ..., "filled": {sym: source}, "missing": [...]}.
-Usage: fill_latest_bar.py --date 2026-11-02 --pool /tmp/pool.txt [--out data] [--sources yahoo-intraday,stooq,nasdaq]
+Usage: fill_latest_bar.py --date 2026-11-02 --pool /tmp/pool.txt [--out data] [--sources yahoo-intraday,nasdaq]
 """
 import argparse
 import csv
@@ -118,14 +118,16 @@ def from_stooq(sym, day):
 def from_nasdaq(sym, day):
     for cls in ('stocks', 'etf'):
         url = (f'https://api.nasdaq.com/api/quote/{sym}/historical?assetclass={cls}'
-               f'&fromdate={day}&todate={day}&limit=5')
+               f'&fromdate={day - timedelta(days=7)}&todate={day + timedelta(days=1)}&limit=10')
         bar = parse_nasdaq(json.loads(get(url)), day)
         if bar:
             return bar
     return None
 
 
-SOURCES = {'yahoo-intraday': from_yahoo_intraday, 'stooq': from_stooq, 'nasdaq': from_nasdaq}
+# stooq.com now answers scripts with a JavaScript browser check (seen 2026-11-03), so it is
+# kept for manual use only and is not in the default order.
+SOURCES = {'yahoo-intraday': from_yahoo_intraday, 'nasdaq': from_nasdaq, 'stooq': from_stooq}
 
 
 def prev_close(path, day):
@@ -140,7 +142,7 @@ def main():
     ap.add_argument('--date', required=True)
     ap.add_argument('--pool', default=os.path.join(REPO, 'strategies', 'friestrader', 'pool.txt'))
     ap.add_argument('--out', default=os.path.join(REPO, 'data'))
-    ap.add_argument('--sources', default='yahoo-intraday,stooq,nasdaq')
+    ap.add_argument('--sources', default='yahoo-intraday,nasdaq')
     ap.add_argument('--dry-run', action='store_true', help='print what would be filled, write nothing')
     ap.add_argument('--debug', action='store_true', help='print the start of every HTTP response')
     a = ap.parse_args()

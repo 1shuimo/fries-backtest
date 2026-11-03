@@ -91,7 +91,7 @@ jobs:
         run: |
           d="${{ steps.day.outputs.date }}"
           echo "盯盘 $d：Yahoo 行情还没更新到 $d，今天没有生成报告，请不要按旧报告操作" > /tmp/summary.txt
-          { echo "# 盯盘 $d：行情未更新"; echo; echo "Yahoo 和备用源（Yahoo 分时、Stooq、Nasdaq）重试 4 次（约 40 分钟）后，股票池里仍有超过 10% 的股票没有 $d 的日线，所以没有生成报告。"; echo;
+          { echo "# 盯盘 $d：行情未更新"; echo; echo "Yahoo 和备用源（Yahoo 分时、Nasdaq）重试 4 次（约 40 分钟）后，股票池里仍有超过 10% 的股票没有 $d 的日线，所以没有生成报告。"; echo;
             echo "可以稍后在 Actions 里手动运行 daily-monitor（asof 填 $d）。"; } > /tmp/stale.md
           python tools/notify.py /tmp/stale.md /tmp/summary.txt "https://github.com/${{ github.repository }}/actions/workflows/daily-monitor.yml"
           exit 1

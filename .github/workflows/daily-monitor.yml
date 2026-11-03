@@ -7,7 +7,7 @@ on:
   # the second one skips when the first already wrote that day's report.
   # Off the hour on purpose: top-of-hour schedules are the ones most often delayed or dropped.
   schedule:
-    - cron: "37 21 * * 1-5"   # 21:37 UTC = 16:37 New York (EST) / 17:37 (EDT); ~05:37/04:37 Beijing
+    - cron: "7 22 * * 1-5"    # 22:07 UTC = 06:07 Beijing; 17:07 New York (EST) / 18:07 (EDT)
     - cron: "7 23 * * 1-5"    # backup: 23:07 UTC; ~07:07/06:07 Beijing
   workflow_dispatch:
     inputs:

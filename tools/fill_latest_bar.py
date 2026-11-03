@@ -3,12 +3,13 @@
 
 Yahoo's daily endpoint sometimes lags for hours after the close (2026-11-02: 160 of 163 symbols
 had no bar by 21:13 New York). For each data/<SYM>.csv without a row for --date, try in order:
-  1. yahoo-intraday : Yahoo 30-minute bars for that session, aggregated to one daily bar
-  2. nasdaq         : api.nasdaq.com historical quotes
+  1. nasdaq         : api.nasdaq.com historical quotes (official closing print)
+  2. yahoo-intraday : Yahoo 30-minute bars for that session, aggregated to one daily bar
+                      (misses the closing auction: closes off by a few cents, 2026-11-02 check)
 (stooq.com is available with --sources but blocks scripts behind a browser check.)
 and append the first complete bar found. Only the one missing day is added; history stays Yahoo's.
 Writes <out>/_fallback.json = {"date": ..., "filled": {sym: source}, "missing": [...]}.
-Usage: fill_latest_bar.py --date 2026-11-02 --pool /tmp/pool.txt [--out data] [--sources yahoo-intraday,nasdaq]
+Usage: fill_latest_bar.py --date 2026-11-02 --pool /tmp/pool.txt [--out data] [--sources nasdaq,yahoo-intraday]
 """
 import argparse
 import csv
@@ -142,7 +143,7 @@ def main():
     ap.add_argument('--date', required=True)
     ap.add_argument('--pool', default=os.path.join(REPO, 'strategies', 'friestrader', 'pool.txt'))
     ap.add_argument('--out', default=os.path.join(REPO, 'data'))
-    ap.add_argument('--sources', default='yahoo-intraday,nasdaq')
+    ap.add_argument('--sources', default='nasdaq,yahoo-intraday')
     ap.add_argument('--dry-run', action='store_true', help='print what would be filled, write nothing')
     ap.add_argument('--debug', action='store_true', help='print the start of every HTTP response')
     a = ap.parse_args()

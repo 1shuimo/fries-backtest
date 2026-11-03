@@ -338,7 +338,7 @@ def fmt_swing(c):
     return f"{c['swing']:.2f}（−{1 - c['swing'] / c['close']:.1%}）"
 
 
-FALLBACK_NAMES = {'yahoo-intraday': 'Yahoo 分时合成', 'stooq': 'Stooq', 'nasdaq': 'Nasdaq'}
+FALLBACK_NAMES = {'yahoo-intraday': 'Yahoo 分时合成（收盘价可能差几分钱）', 'stooq': 'Stooq', 'nasdaq': 'Nasdaq 官方'}
 FALLBACK_FILE = None  # set in main() to <data>/_fallback.json
 
 
@@ -353,7 +353,7 @@ def fallback_note(asof):
     by = defaultdict(list)
     for s, src in sorted(fb['filled'].items()):
         by[FALLBACK_NAMES.get(src, src)].append(s)
-    return ('Yahoo 日线当时还没更新，以下股票的当天 K 线来自备用源（收盘价可能和官方收盘价有几分钱差异）：'
+    return ('Yahoo 日线当时还没更新，以下股票的当天 K 线来自备用源：'
             + '；'.join(f'{k} {len(v)} 只（{", ".join(v)}）' for k, v in by.items()))
 
 

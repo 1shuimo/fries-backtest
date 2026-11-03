@@ -15,6 +15,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -503,13 +504,25 @@ def main():
     names = ev.load_names()
     focus = [c['symbol'] for c in cands if c['qty']] + [p.symbol for p in positions if p.qty]
     info = ev.company_info(focus, asof) if (a.html_out or a.text_out) and focus else {}
+    for s in focus:  # visible in the Actions log, so a missing card row can be traced
+        d = info.get(s) or {}
+        print(f'info {s}: ' + (f'error {d["error"]}' if d.get('error') else
+              f'about={bool(d.get("about"))} fund={len(d.get("fund") or {})} last={bool(d.get("last_earnings"))} '
+              f'next={d.get("next_earnings")}'), file=sys.stderr)
+    briefs = {}
+    if (a.html_out or a.text_out) and os.environ.get('ANTHROPIC_API_KEY'):
+        import ai_brief
+        setups = [(c['symbol'], {'今收': c['close'], '计划买入股数': c['qty'], '止损': c['stop'] or '买入当天最低价',
+                                 '止损幅度': f'{c["dist"] / c["close"]:.1%}', '行业': c['sector']})
+                  for c in cands if c['qty']]
+        briefs = ai_brief.briefs(setups, info, names, asof)
     if a.summary_out:
         Path(a.summary_out).write_text(ev.subject(asof, positions, cands, names, NYSE_HOLIDAYS) + '\n')
     if a.html_out:
         Path(a.html_out).write_text(ev.build_html(asof, equity, positions, cands, cash_left, names, NYSE_HOLIDAYS,
-                                                  a.link, [fallback_note(asof)], info), encoding='utf-8')
+                                                  a.link, [fallback_note(asof)], info, briefs), encoding='utf-8')
     if a.text_out:
-        Path(a.text_out).write_text(ev.build_text(asof, equity, positions, cands, names, NYSE_HOLIDAYS, info) + '\n',
+        Path(a.text_out).write_text(ev.build_text(asof, equity, positions, cands, names, NYSE_HOLIDAYS, info, briefs) + '\n',
                                     encoding='utf-8')
 
 

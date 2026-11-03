@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install yfinance pandas
+      - run: pip install yfinance pandas anthropic
       - name: Monitor tests
         run: cd strategies/quant && python -m unittest tests.test_daily_monitor
       - name: Trading date
@@ -69,6 +69,8 @@ jobs:
       - name: Build report
         id: report
         if: steps.data.outputs.state == 'ready'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional: Claude's fundamental brief per stock
         run: |
           out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
           python tools/fetch_names.py --limit 40 || true   # company names for the email, cached in names.json

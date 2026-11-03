@@ -28,6 +28,12 @@ def label(sym, names):
     return f'{sym}（{n}）' if n else sym
 
 
+FUND_KEYS = ('totalRevenue', 'revenueGrowth', 'grossMargins', 'operatingMargins', 'profitMargins', 'freeCashflow',
+             'totalCash', 'totalDebt', 'trailingPE', 'forwardPE', 'priceToSalesTrailing12Months', 'targetMeanPrice',
+             'recommendationKey', 'numberOfAnalystOpinions', 'shortPercentOfFloat', 'heldPercentInstitutions',
+             'currentPrice', 'fiftyTwoWeekHigh', 'fiftyTwoWeekLow', 'beta')
+REC = {'strong_buy': '强烈买入', 'buy': '买入', 'hold': '持有', 'underperform': '跑输', 'sell': '卖出',
+       'strong_sell': '强烈卖出', 'none': ''}
 EARNINGS_WARN_DAYS = 10  # calendar days: a report this close means holding through a likely gap
 
 
@@ -51,6 +57,7 @@ def company_info(symbols, asof):
             d['industry'] = info.get('industry') or ''
             d['cap'] = info.get('marketCap')
             d['longName'] = info.get('longName') or ''
+            d['fund'] = {k: info.get(k) for k in FUND_KEYS if info.get(k) is not None}
         except Exception as e:
             d['error'] = f'{type(e).__name__}'
         try:
@@ -94,7 +101,85 @@ def _cap(v):
     return f'市值约 {v / 1e9:,.0f} 亿美元' if v >= 1e11 else f'市值约 {v / 1e8:,.0f} 亿美元'
 
 
-def info_rows(sym, info, asof):
+def _usd(v):
+    v = float(v)
+    a = abs(v)
+    s = f'{a / 1e8:,.1f} 亿' if a >= 1e8 else f'{a / 1e4:,.0f} 万'
+    return ('−' if v < 0 else '') + s + '美元'
+
+
+def fund_lines(f, price=None):
+    """Short Chinese lines from Yahoo's fundamentals, worst news in red."""
+    pct = lambda x: f'{x:+.0%}' if x is not None else None
+    L = []
+    g = []
+    if f.get('totalRevenue'):
+        g.append(f'年收入 {_usd(f["totalRevenue"])}')
+    if f.get('revenueGrowth') is not None:
+        c = GREEN if f['revenueGrowth'] > 0 else RED
+        g.append(f'最近一季收入同比 <b style="color:{c}">{pct(f["revenueGrowth"])}</b>')
+    if g:
+        L.append(('成长', '，'.join(g)))
+    m = []
+    if f.get('grossMargins') is not None:
+        m.append(f'毛利率 {f["grossMargins"]:.0%}')
+    if f.get('operatingMargins') is not None:
+        c = GREEN if f['operatingMargins'] > 0 else RED
+        m.append(f'经营利润率 <b style="color:{c}">{f["operatingMargins"]:.0%}</b>')
+    if f.get('profitMargins') is not None:
+        m.append('盈利' if f['profitMargins'] > 0 else f'<b style="color:{RED}">亏损</b>')
+    if m:
+        L.append(('利润', '，'.join(m)))
+    c = []
+    if f.get('freeCashflow') is not None:
+        col = GREEN if f['freeCashflow'] > 0 else RED
+        c.append(f'自由现金流 <span style="color:{col}">{_usd(f["freeCashflow"])}</span>')
+    if f.get('totalCash') is not None:
+        c.append(f'现金 {_usd(f["totalCash"])}')
+    if f.get('totalDebt') is not None:
+        c.append(f'负债 {_usd(f["totalDebt"])}')
+    if c:
+        L.append(('现金', '，'.join(c)))
+    v = []
+    if f.get('trailingPE'):
+        v.append(f'市盈率 {f["trailingPE"]:.0f}')
+    elif f.get('forwardPE') and f['forwardPE'] > 0:
+        v.append(f'预期市盈率 {f["forwardPE"]:.0f}')
+    elif f.get('profitMargins') is not None and f['profitMargins'] <= 0:
+        v.append('亏损，无市盈率')
+    if f.get('priceToSalesTrailing12Months'):
+        v.append(f'市销率 {f["priceToSalesTrailing12Months"]:.1f}')
+    if v:
+        L.append(('估值', '，'.join(v)))
+    a = []
+    px = price or f.get('currentPrice')
+    if f.get('targetMeanPrice') and px:
+        up = f['targetMeanPrice'] / px - 1
+        a.append(f'目标价均值 {f["targetMeanPrice"]:.2f}（{up:+.0%}）')
+    rk = REC.get(str(f.get('recommendationKey') or ''), '')
+    if rk:
+        a.append(f'评级 {rk}' + (f'（{f["numberOfAnalystOpinions"]} 家）' if f.get('numberOfAnalystOpinions') else ''))
+    if f.get('shortPercentOfFloat') is not None:
+        s = f['shortPercentOfFloat']
+        a.append(f'空头占流通股 ' + (f'<b style="color:{RED}">{s:.0%}</b>' if s >= .15 else f'{s:.0%}'))
+    if a:
+        L.append(('分析师', '，'.join(a)))
+    return L
+
+
+def brief_rows(b):
+    if not b:
+        return []
+    lines = [x.strip() for x in b['text'].splitlines() if x.strip()]
+    body = '<br>'.join(_e(x) for x in lines)
+    src = ''
+    if b.get('sources'):
+        src = (f'<br><span style="font-size:12px;color:{MUTED}">来源：' +
+               '；'.join(f'<a href="{_e(u)}" style="color:{BLUE}">{_e(str(tt)[:40])}</a>' for tt, u in b['sources']) + '</span>')
+    return [_row('Claude 分析', f'<span style="font-size:14px;line-height:1.6">{body}</span>{src}')]
+
+
+def info_rows(sym, info, asof, price=None):
     """Card rows about the company and its earnings; warns when the next report is close."""
     d = info.get(sym) or {}
     rows = []
@@ -102,6 +187,8 @@ def info_rows(sym, info, asof):
     if d.get('about') or about:
         rows.append(_row('公司', (f'<span style="font-size:13px;color:{MUTED}">{_e(about)}</span><br>' if about else '')
                          + f'<span style="font-size:13px">{_e(d.get("about", ""))}</span>'))
+    for k, v in fund_lines(d.get('fund') or {}, price):
+        rows.append(_row(k, f'<span style="font-size:14px">{v}</span>'))
     le = d.get('last_earnings')
     if le and le.get('eps') is not None:
         beat = le['est'] is not None and le['eps'] >= le['est']
@@ -190,7 +277,7 @@ def subject(asof, positions, cands, names, holidays):
     return f'盯盘 {when}：{what}'
 
 
-def build_html(asof, equity, positions, cands, cash_left, names, holidays, link='', notes=(), info=None):
+def build_html(asof, equity, positions, cands, cash_left, names, holidays, link='', notes=(), info=None, briefs=None):
     from daily_monitor import breakeven_price, CHECK_DAY  # late import: avoid a cycle
     when, what = headline(asof, positions, cands, names, holidays)
     nxt = next_session(asof, holidays)
@@ -226,7 +313,7 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
                 elif p.held < CHECK_DAY:
                     rows.append(_row('第 3 天', f'第 {CHECK_DAY} 天收盘 ≤ {be:.2f} 就次日全卖（现在第 {p.held} 天）'))
         if p.action not in ('breakeven', 'day3', 'overdue'):
-            rows += info_rows(p.symbol, info or {}, asof)
+            rows += info_rows(p.symbol, info or {}, asof, p.close)
         for n in p.notes:
             rows.append(_row('注意', _e(n)))
         out.append(_card(_head(p.symbol, names), f'<b style="color:{color}">{_e(badge)}</b> · {_e(why)}', rows, color))
@@ -247,7 +334,8 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
                 _row('止损单', stop),
                 _row('最多亏', f'约 ${c["qty"] * c["dist"]:,.0f}（净值的 {c["qty"] * c["dist"] / equity:.1%}）'),
                 _row('今天', f'收 {c["close"]:.2f} · J {c["j"]:.1f} · 高于 60 日线 {c["close"] / c["ma60"] - 1:+.1%}')]
-        rows += info_rows(c['symbol'], info or {}, asof)
+        rows += info_rows(c['symbol'], info or {}, asof, c['close'])
+        rows += brief_rows((briefs or {}).get(c['symbol']))
         sub = _e(c['sector']) + (' · 今天第一次出现买点' if c['new'] else ' · 连续几天满足条件')
         out.append(_card(_head(c['symbol'], names), sub, rows, BLUE))
     skipped = [c for c in cands if not c['qty']]
@@ -271,7 +359,7 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
     return ''.join(out)
 
 
-def build_text(asof, equity, positions, cands, names, holidays, info=None):
+def build_text(asof, equity, positions, cands, names, holidays, info=None, briefs=None):
     """Plain-text version (mail clients that block HTML, and push channels)."""
     when, what = headline(asof, positions, cands, names, holidays)
     L = [f'盯盘 {when}', what, '']
@@ -295,5 +383,8 @@ def build_text(asof, equity, positions, cands, names, holidays, info=None):
         if d.get('next_earnings'):
             days = (datetime.date.fromisoformat(d['next_earnings']) - asof).days
             L.append(f'    下次财报 {d["next_earnings"]}（{days} 天后）' + ('  ⚠ 会跨过财报' if 0 <= days <= EARNINGS_WARN_DAYS else ''))
+        b = (briefs or {}).get(c['symbol'])
+        if b:
+            L += ['    ' + x.strip() for x in b['text'].splitlines() if x.strip()]
     L += ['', f'账户净值按 ${equity:,.0f} 计算。只是规则提醒，不是投资建议。']
     return '\n'.join(L)

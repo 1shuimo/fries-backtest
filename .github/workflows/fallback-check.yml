@@ -1,0 +1,37 @@
+name: fallback-check
+
+# Diagnostic: can each backup source rebuild a recent daily bar from GitHub's runners?
+# Removes the latest row from a few symbols and asks every source alone (dry run, nothing written).
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/**"]
+    paths: ["tools/fill_latest_bar.py", ".github/workflows/fallback-check.yml"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance pandas
+      - name: Download a few symbols, drop their latest row
+        id: prep
+        run: |
+          printf "NVDA\nKO\nRGC\nTSLA\nQQQ\n" > /tmp/few.txt
+          python tools/fetch_yahoo.py --pool /tmp/few.txt --start 2026-09-01 --out /tmp/d
+          day=$(tail -1 /tmp/d/SPY.csv | cut -c1-10)
+          echo "day=$day" >> "$GITHUB_OUTPUT"
+          echo "Yahoo daily rows being removed (the answer the backups should match):"
+          for f in /tmp/d/*.csv; do echo "$(basename $f .csv) $(grep "^$day" "$f" | cut -c1-120)" >> /tmp/answer.txt; grep -v "^$day" "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
+          cat /tmp/answer.txt
+          echo "latest Yahoo day: $day (removed from the files)"
+      - name: Each source alone
+        run: |
+          for src in yahoo-intraday nasdaq; do
+            echo "=== $src"
+            python tools/fill_latest_bar.py --date "${{ steps.prep.outputs.day }}" --pool /tmp/few.txt --out /tmp/d --sources $src --dry-run --debug 2>/dev/null | grep -v "^  GET.*yahoo" || true
+          done
+          echo "=== Yahoo daily (the answer)"; cat /tmp/answer.txt

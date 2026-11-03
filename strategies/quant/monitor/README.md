@@ -4,7 +4,9 @@
 只读行情、只出提醒，**不下单**。你自己在富途下单。
 
 每个美股交易日收盘后（北京时间早上约 6:15），GitHub Actions 会：
-1. 下载 `strategies/friestrader/pool.txt`（你的富途自选）全部日线；
+1. 下载 `strategies/friestrader/pool.txt`（你的富途自选）全部日线；Yahoo 日线还没更新当天的股票，
+   由 `tools/fill_latest_bar.py` 从备用源补上当天一根 K 线（先 Nasdaq 官方数据，再 Yahoo 分时合成），
+   仍不到 90% 就每 10 分钟重试，最多 4 次，之后发"行情未更新"提醒而不出报告；
 2. 运行 `daily_monitor.py`；
 3. 把报告写进 `monitor/reports/日期.md`，并通过 `tools/notify.py` 推送给你（见下）。
 另有一个 Claude 定时任务在北京时间早上读这份报告，在 Claude 里推送一份中文摘要。

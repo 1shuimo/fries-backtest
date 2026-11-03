@@ -338,6 +338,25 @@ def fmt_swing(c):
     return f"{c['swing']:.2f}（−{1 - c['swing'] / c['close']:.1%}）"
 
 
+FALLBACK_NAMES = {'yahoo-intraday': 'Yahoo 分时合成（收盘价可能差几分钱）', 'stooq': 'Stooq', 'nasdaq': 'Nasdaq 官方'}
+FALLBACK_FILE = None  # set in main() to <data>/_fallback.json
+
+
+def fallback_note(asof):
+    """Which symbols got today's bar from a backup source instead of Yahoo daily."""
+    try:
+        fb = json.loads(Path(FALLBACK_FILE).read_text())
+    except (TypeError, OSError, ValueError):
+        return ''
+    if fb.get('date') != str(asof) or not fb.get('filled'):
+        return ''
+    by = defaultdict(list)
+    for s, src in sorted(fb['filled'].items()):
+        by[FALLBACK_NAMES.get(src, src)].append(s)
+    return ('Yahoo 日线当时还没更新，以下股票的当天 K 线来自备用源：'
+            + '；'.join(f'{k} {len(v)} 只（{", ".join(v)}）' for k, v in by.items()))
+
+
 def report(asof, equity, positions, cands, cash_left, sectors, missing, stale):
     L = [f'# 盯盘提醒 {asof}（B1 + MA60 + 第3天检查）', '',
          f'数据：{asof} 收盘（Yahoo 复权日线）。账户净值设定 ${equity:,.0f}（改 `monitor/config.json`）。',
@@ -399,6 +418,9 @@ def report(asof, equity, positions, cands, cash_left, sectors, missing, stale):
           '- 保本：任一收盘整笔赚钱后，再出现收盘整笔不赚钱 → 次日开盘全卖。',
           '- 第3天：买入日算第1天，第3天收盘整笔不赚钱 → 次日开盘全卖。',
           '- 止盈：大阳线 收盘/开盘−1 ≥ 5% → 次日开盘卖最初股数 1/3；第2根到 2/3；第3根清仓。', '']
+    fb = fallback_note(asof)
+    if fb:
+        L += [fb, '']
     if missing or stale:
         L += [f'没有行情文件：{", ".join(missing) or "无"}；行情没有 {asof} 这一天（停牌、退市或新上市）：{", ".join(stale) or "无"}', '']
     return '\n'.join(L)
@@ -428,6 +450,8 @@ def main():
     ap.add_argument('--check-only', action='store_true', help='with --require-date: only check data freshness')
     a = ap.parse_args()
     data_dir = Path(a.data)
+    global FALLBACK_FILE
+    FALLBACK_FILE = data_dir / '_fallback.json'
     sectors = load_pool()
     positions = read_positions(a.positions)
     for p in positions:

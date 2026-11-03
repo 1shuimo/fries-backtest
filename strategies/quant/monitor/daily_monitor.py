@@ -501,13 +501,15 @@ def main():
         Path(a.out).write_text(text + '\n')
     import email_view as ev
     names = ev.load_names()
+    focus = [c['symbol'] for c in cands if c['qty']] + [p.symbol for p in positions if p.qty]
+    info = ev.company_info(focus, asof) if (a.html_out or a.text_out) and focus else {}
     if a.summary_out:
         Path(a.summary_out).write_text(ev.subject(asof, positions, cands, names, NYSE_HOLIDAYS) + '\n')
     if a.html_out:
         Path(a.html_out).write_text(ev.build_html(asof, equity, positions, cands, cash_left, names, NYSE_HOLIDAYS,
-                                                  a.link, [fallback_note(asof)]), encoding='utf-8')
+                                                  a.link, [fallback_note(asof)], info), encoding='utf-8')
     if a.text_out:
-        Path(a.text_out).write_text(ev.build_text(asof, equity, positions, cands, names, NYSE_HOLIDAYS) + '\n',
+        Path(a.text_out).write_text(ev.build_text(asof, equity, positions, cands, names, NYSE_HOLIDAYS, info) + '\n',
                                     encoding='utf-8')
 
 

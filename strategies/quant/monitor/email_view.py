@@ -2,6 +2,7 @@
 
 Built from the same objects daily_monitor.report() uses. Inline styles only, because mail apps
 (Gmail on phones especially) drop most <style> rules."""
+import datetime
 import html
 import json
 import math
@@ -25,6 +26,100 @@ def label(sym, names):
     """'AI（C3.ai）' or just 'AI' when the name is unknown."""
     n = names.get(sym)
     return f'{sym}（{n}）' if n else sym
+
+
+EARNINGS_WARN_DAYS = 10  # calendar days: a report this close means holding through a likely gap
+
+
+def company_info(symbols, asof):
+    """Description, size and earnings for a few symbols, from Yahoo. Empty dict per symbol when offline."""
+    out = {}
+    try:
+        import yfinance as yf
+    except ImportError:
+        return out
+    for s in symbols:
+        d = {}
+        try:
+            t = yf.Ticker(s)
+            info = t.get_info() or {}
+            summ = ' '.join(str(info.get('longBusinessSummary') or '').split())
+            if summ:
+                first = summ.split('. ')
+                text = first[0] + ('. ' + first[1] if len(first) > 1 and len(first[0]) < 120 else '')
+                d['about'] = (text[:260].rstrip() + '…') if len(text) > 260 else text.rstrip('.') + '.'
+            d['industry'] = info.get('industry') or ''
+            d['cap'] = info.get('marketCap')
+            d['longName'] = info.get('longName') or ''
+        except Exception as e:
+            d['error'] = f'{type(e).__name__}'
+        try:
+            cal = t.get_calendar() or {}
+            nxt = [x for x in (cal.get('Earnings Date') or []) if str(x) >= str(asof)]
+            if nxt:
+                d['next_earnings'] = str(min(nxt))[:10]
+        except Exception:
+            pass
+        try:
+            ed = t.get_earnings_dates(limit=8)
+            if ed is not None and not ed.empty:
+                past = ed[ed['Reported EPS'].notna()]
+                past = past[[str(i)[:10] <= str(asof) for i in past.index]]
+                if not past.empty:
+                    r = past.sort_index().iloc[-1]
+                    d['last_earnings'] = {'date': str(past.sort_index().index[-1])[:10],
+                                          'eps': _num(r.get('Reported EPS')), 'est': _num(r.get('EPS Estimate')),
+                                          'surprise': _num(r.get('Surprise(%)'))}
+                if 'next_earnings' not in d:
+                    fut = [str(i)[:10] for i in ed.index if str(i)[:10] > str(asof)]
+                    if fut:
+                        d['next_earnings'] = min(fut)
+        except Exception:
+            pass
+        out[s] = d
+    return out
+
+
+def _num(x):
+    try:
+        x = float(x)
+        return None if math.isnan(x) else x
+    except (TypeError, ValueError):
+        return None
+
+
+def _cap(v):
+    if not v:
+        return ''
+    return f'市值约 {v / 1e9:,.0f} 亿美元' if v >= 1e11 else f'市值约 {v / 1e8:,.0f} 亿美元'
+
+
+def info_rows(sym, info, asof):
+    """Card rows about the company and its earnings; warns when the next report is close."""
+    d = info.get(sym) or {}
+    rows = []
+    about = ' · '.join(x for x in (d.get('industry'), _cap(d.get('cap'))) if x)
+    if d.get('about') or about:
+        rows.append(_row('公司', (f'<span style="font-size:13px;color:{MUTED}">{_e(about)}</span><br>' if about else '')
+                         + f'<span style="font-size:13px">{_e(d.get("about", ""))}</span>'))
+    le = d.get('last_earnings')
+    if le and le.get('eps') is not None:
+        beat = le['est'] is not None and le['eps'] >= le['est']
+        txt = f'{le["date"]}：每股收益 {le["eps"]:.2f}'
+        if le['est'] is not None:
+            txt += f'，预期 {le["est"]:.2f}，<b style="color:{GREEN if beat else RED}">{"超预期" if beat else "不及预期"}</b>'
+        rows.append(_row('上次财报', txt))
+    ne = d.get('next_earnings')
+    if ne:
+        days = (datetime.date.fromisoformat(ne) - asof).days
+        if 0 <= days <= EARNINGS_WARN_DAYS:
+            rows.append(_row('下次财报', f'<b style="color:{RED}">{ne}（{days} 天后）</b><br><span style="font-size:13px;'
+                             f'color:{RED}">持仓会跨过财报，财报后跳空可能直接越过止损价</span>'))
+        else:
+            rows.append(_row('下次财报', f'{ne}（{days} 天后）'))
+    elif d and not d.get('error'):
+        rows.append(_row('下次财报', f'<span style="color:{MUTED}">Yahoo 没有日期，买前在富途「财报」里看一眼</span>'))
+    return rows
 
 
 def next_session(day, holidays):
@@ -81,12 +176,21 @@ def headline(asof, positions, cands, names, holidays):
     return when, '；'.join(parts)
 
 
+def earnings_soon(cands, info, asof):
+    out = []
+    for c in cands:
+        ne = ((info or {}).get(c['symbol']) or {}).get('next_earnings')
+        if c['qty'] and ne and 0 <= (datetime.date.fromisoformat(ne) - asof).days <= EARNINGS_WARN_DAYS:
+            out.append(c['symbol'])
+    return out
+
+
 def subject(asof, positions, cands, names, holidays):
     when, what = headline(asof, positions, cands, names, holidays)
     return f'盯盘 {when}：{what}'
 
 
-def build_html(asof, equity, positions, cands, cash_left, names, holidays, link='', notes=()):
+def build_html(asof, equity, positions, cands, cash_left, names, holidays, link='', notes=(), info=None):
     from daily_monitor import breakeven_price, CHECK_DAY  # late import: avoid a cycle
     when, what = headline(asof, positions, cands, names, holidays)
     nxt = next_session(asof, holidays)
@@ -95,6 +199,11 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
            f'<div style="max-width:560px;margin:0 auto">',
            f'<div style="font-size:13px;color:{MUTED}">每日盯盘 · {when}（北京时间 {nxt:%m-%d} 晚上开盘）</div>',
            f'<div style="font-size:22px;font-weight:700;margin:4px 0 16px;line-height:1.35">{_e(what)}</div>']
+    soon = earnings_soon(cands, info, asof)
+    if soon:
+        out.append(f'<div style="background:#fff1f0;border:1px solid {RED};border-radius:10px;padding:10px 14px;'
+                   f'margin:0 0 14px;font-size:14px;color:{RED}">⚠ {_e("、".join(soon))} {EARNINGS_WARN_DAYS} 天内发财报。'
+                   f'规则本身不看财报，回测里也包含跨财报的交易；但财报后跳空可能直接越过止损价，亏损会超过 0.5%。</div>')
 
     out.append(f'<div style="font-size:16px;font-weight:700;margin:8px 0">持仓</div>')
     if not positions:
@@ -116,6 +225,8 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
                     rows.append(_row('保本线', f'收盘 ≤ {be:.2f} 就次日全卖'))
                 elif p.held < CHECK_DAY:
                     rows.append(_row('第 3 天', f'第 {CHECK_DAY} 天收盘 ≤ {be:.2f} 就次日全卖（现在第 {p.held} 天）'))
+        if p.action not in ('breakeven', 'day3', 'overdue'):
+            rows += info_rows(p.symbol, info or {}, asof)
         for n in p.notes:
             rows.append(_row('注意', _e(n)))
         out.append(_card(_head(p.symbol, names), f'<b style="color:{color}">{_e(badge)}</b> · {_e(why)}', rows, color))
@@ -136,6 +247,7 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
                 _row('止损单', stop),
                 _row('最多亏', f'约 ${c["qty"] * c["dist"]:,.0f}（净值的 {c["qty"] * c["dist"] / equity:.1%}）'),
                 _row('今天', f'收 {c["close"]:.2f} · J {c["j"]:.1f} · 高于 60 日线 {c["close"] / c["ma60"] - 1:+.1%}')]
+        rows += info_rows(c['symbol'], info or {}, asof)
         sub = _e(c['sector']) + (' · 今天第一次出现买点' if c['new'] else ' · 连续几天满足条件')
         out.append(_card(_head(c['symbol'], names), sub, rows, BLUE))
     skipped = [c for c in cands if not c['qty']]
@@ -159,7 +271,7 @@ def build_html(asof, equity, positions, cands, cash_left, names, holidays, link=
     return ''.join(out)
 
 
-def build_text(asof, equity, positions, cands, names, holidays):
+def build_text(asof, equity, positions, cands, names, holidays, info=None):
     """Plain-text version (mail clients that block HTML, and push channels)."""
     when, what = headline(asof, positions, cands, names, holidays)
     L = [f'盯盘 {when}', what, '']
@@ -177,5 +289,11 @@ def build_text(asof, equity, positions, cands, names, holidays):
         stop = f'{c["stop"]:.2f}（前低，−{c["dist"] / c["close"]:.1%}）' if c['stop'] is not None else '买入当天最低价'
         L.append(f'【买入】{label(c["symbol"], names)}：开盘买 {c["qty"]} 股（约 ${c["qty"] * c["close"]:,.0f}），'
                  f'止损单 {stop}，最多亏约 ${c["qty"] * c["dist"]:,.0f}')
+        d = (info or {}).get(c['symbol']) or {}
+        if d.get('about'):
+            L.append('    ' + d['about'])
+        if d.get('next_earnings'):
+            days = (datetime.date.fromisoformat(d['next_earnings']) - asof).days
+            L.append(f'    下次财报 {d["next_earnings"]}（{days} 天后）' + ('  ⚠ 会跨过财报' if 0 <= days <= EARNINGS_WARN_DAYS else ''))
     L += ['', f'账户净值按 ${equity:,.0f} 计算。只是规则提醒，不是投资建议。']
     return '\n'.join(L)

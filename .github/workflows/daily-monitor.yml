@@ -3,8 +3,12 @@ name: daily-monitor
 # Every US trading day after the close: download pool prices, run the B1+MA60+day-3 checklist,
 # commit the report and push it to WeChat / iPhone / email / Telegram via tools/notify.py (secrets).
 on:
+  # GitHub drops scheduled runs now and then (2026-11-02 never fired), so there are two;
+  # the second one skips when the first already wrote that day's report.
+  # Off the hour on purpose: top-of-hour schedules are the ones most often delayed or dropped.
   schedule:
-    - cron: "15 22 * * 1-5"   # 22:15 UTC = 17:15/18:15 New York, ~06:15 Beijing next morning
+    - cron: "37 21 * * 1-5"   # 21:37 UTC = 16:37 New York (EST) / 17:37 (EDT); ~05:37/04:37 Beijing
+    - cron: "7 23 * * 1-5"    # backup: 23:07 UTC; ~07:07/06:07 Beijing
   workflow_dispatch:
     inputs:
       asof:
@@ -44,6 +48,9 @@ jobs:
         run: |
           set +e
           out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$out" ]; then
+            echo "report for ${{ steps.day.outputs.date }} already exists (earlier schedule ran)"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           python strategies/quant/monitor/daily_monitor.py --asof "${{ steps.day.outputs.date }}" \
             --require-date "${{ steps.day.outputs.date }}" --out "$out" --summary-out /tmp/summary.txt
           code=$?

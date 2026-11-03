@@ -71,8 +71,10 @@ jobs:
         if: steps.data.outputs.state == 'ready'
         run: |
           out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
+          python tools/fetch_names.py --limit 40 || true   # company names for the email, cached in names.json
           python strategies/quant/monitor/daily_monitor.py --asof "${{ steps.day.outputs.date }}" \
-            --out "$out" --summary-out /tmp/summary.txt
+            --out "$out" --summary-out /tmp/summary.txt --html-out /tmp/email.html --text-out /tmp/email.txt \
+            --link "https://github.com/${{ github.repository }}/blob/main/$out"
           echo "out=$out" >> "$GITHUB_OUTPUT"
       - name: Warn that data is not updated
         # Only the backup schedule or a manual run warns; the first schedule leaves it to the backup.
@@ -100,7 +102,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add strategies/quant/monitor/reports/
+          git add strategies/quant/monitor/reports/ strategies/quant/monitor/names.json
           git commit -m "Daily monitor ${{ steps.day.outputs.date }} [skip ci]" || echo "nothing to commit"
           git push
       - name: Notify (WeChat / Bark / Telegram / email)
@@ -118,4 +120,5 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
           python tools/notify.py "${{ steps.report.outputs.out }}" /tmp/summary.txt \
-            "https://github.com/${{ github.repository }}/blob/main/${{ steps.report.outputs.out }}"
+            "https://github.com/${{ github.repository }}/blob/main/${{ steps.report.outputs.out }}" \
+            --html /tmp/email.html --text /tmp/email.txt

@@ -28,8 +28,8 @@
   "volatility": 0.2074
  },
  "equal_weight_buy_hold": {
-  "total_return": 2.5012,
-  "cagr": 0.2403,
+  "total_return": 2.5017,
+  "cagr": 0.2404,
   "max_drawdown": -0.3849,
   "sharpe": 0.73,
   "volatility": 0.4007
@@ -54,10 +54,10 @@
  },
  "entry_decisions": {
   "bought": 312,
-  "max_concurrent_positions": 27628,
-  "entry_extension": 12421,
+  "max_concurrent_positions": 27641,
+  "entry_extension": 12422,
   "entry_price_gap": 4198,
-  "sell_reentry_lock": 26792,
+  "sell_reentry_lock": 26799,
   "wash_sale": 1345,
   "loss_limit_halt": 478
  },
@@ -195,7 +195,7 @@
   },
   "SQM": {
    "round_trips": 2,
-   "pnl": 205.7
+   "pnl": 205.71
   },
   "AMZN": {
    "round_trips": 1,
@@ -423,7 +423,7 @@
   },
   "GLD": {
    "round_trips": 1,
-   "pnl": -148.91
+   "pnl": -148.92
   },
   "LITE": {
    "round_trips": 2,
@@ -443,7 +443,7 @@
   },
   "MXL": {
    "round_trips": 1,
-   "pnl": -173.37
+   "pnl": -173.38
   },
   "CIEN": {
    "round_trips": 2,

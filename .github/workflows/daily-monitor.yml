@@ -38,27 +38,62 @@ jobs:
         run: |
           d="${{ inputs.asof }}"
           echo "date=${d:-$(TZ=America/New_York date +%F)}" >> "$GITHUB_OUTPUT"
-      - name: Download prices (pool + held symbols)
+      - name: Skip if today's report already exists
+        id: done
+        run: |
+          out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$out" ]; then
+            echo "report for ${{ steps.day.outputs.date }} already exists (earlier schedule ran)"; echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download prices until today's bar is there
+        id: data
+        if: steps.done.outputs.skip != 'true'
         run: |
           cp strategies/friestrader/pool.txt /tmp/pool.txt
           tail -n +2 strategies/quant/monitor/positions.csv | cut -d, -f1 >> /tmp/pool.txt
-          python tools/fetch_yahoo.py --pool /tmp/pool.txt --start 2025-01-01
+          for attempt in 1 2 3 4; do
+            python tools/fetch_yahoo.py --pool /tmp/pool.txt --start 2025-01-01 > /tmp/fetch.log 2>&1 || true
+            tail -3 /tmp/fetch.log
+            set +e
+            python strategies/quant/monitor/daily_monitor.py --require-date "${{ steps.day.outputs.date }}" --check-only
+            code=$?
+            set -e
+            if [ $code -eq 0 ]; then echo "state=ready" >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ $code -eq 3 ]; then echo "state=holiday" >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ $attempt -lt 4 ]; then echo "Yahoo not updated yet (attempt $attempt), waiting 10 min"; sleep 600; fi
+          done
+          echo "state=stale" >> "$GITHUB_OUTPUT"
       - name: Build report
         id: report
+        if: steps.data.outputs.state == 'ready'
         run: |
-          set +e
           out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$out" ]; then
-            echo "report for ${{ steps.day.outputs.date }} already exists (earlier schedule ran)"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
-          fi
           python strategies/quant/monitor/daily_monitor.py --asof "${{ steps.day.outputs.date }}" \
-            --require-date "${{ steps.day.outputs.date }}" --out "$out" --summary-out /tmp/summary.txt
-          code=$?
-          if [ $code -eq 3 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            --out "$out" --summary-out /tmp/summary.txt
           echo "out=$out" >> "$GITHUB_OUTPUT"
-          exit $code
+      - name: Warn that data is not updated
+        # Only the backup schedule or a manual run warns; the first schedule leaves it to the backup.
+        if: steps.data.outputs.state == 'stale' && (github.event_name != 'schedule' || github.event.schedule == '7 23 * * 1-5')
+        env:
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          BARK_URL: ${{ secrets.BARK_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          d="${{ steps.day.outputs.date }}"
+          echo "盯盘 $d：Yahoo 行情还没更新到 $d，今天没有生成报告，请不要按旧报告操作" > /tmp/summary.txt
+          { echo "# 盯盘 $d：行情未更新"; echo; echo "重试 4 次（共约 40 分钟）后，股票池里仍有超过 10% 的股票没有 $d 的日线，所以没有生成报告。"; echo;
+            echo "可以稍后在 Actions 里手动运行 daily-monitor（asof 填 $d）。"; } > /tmp/stale.md
+          python tools/notify.py /tmp/stale.md /tmp/summary.txt "https://github.com/${{ github.repository }}/actions/workflows/daily-monitor.yml"
+          exit 1
       - name: Commit report
-        if: steps.report.outputs.skip != 'true'
+        if: steps.report.outputs.out != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -66,7 +101,7 @@ jobs:
           git commit -m "Daily monitor ${{ steps.day.outputs.date }} [skip ci]" || echo "nothing to commit"
           git push
       - name: Notify (WeChat / Bark / Telegram / email)
-        if: steps.report.outputs.skip != 'true'
+        if: steps.report.outputs.out != ''
         env:
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}

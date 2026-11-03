@@ -24,11 +24,12 @@ jobs:
           python tools/fetch_yahoo.py --pool /tmp/few.txt --start 2026-09-01 --out /tmp/d
           day=$(tail -1 /tmp/d/SPY.csv | cut -c1-10)
           echo "day=$day" >> "$GITHUB_OUTPUT"
-          for f in /tmp/d/*.csv; do grep -v "^$day" "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
+          echo "Yahoo daily rows being removed (the answer the backups should match):"
+          for f in /tmp/d/*.csv; do echo "$(basename $f .csv) $(grep "^$day" "$f" | cut -c1-120)"; grep -v "^$day" "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
           echo "latest Yahoo day: $day (removed from the files)"
       - name: Each source alone
         run: |
           for src in yahoo-intraday stooq nasdaq; do
             echo "=== $src"
-            python tools/fill_latest_bar.py --date "${{ steps.prep.outputs.day }}" --pool /tmp/few.txt --out /tmp/d --sources $src --dry-run || true
+            python tools/fill_latest_bar.py --date "${{ steps.prep.outputs.day }}" --pool /tmp/few.txt --out /tmp/d --sources $src --dry-run --debug || true
           done

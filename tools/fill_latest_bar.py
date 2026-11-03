@@ -91,10 +91,16 @@ def parse_nasdaq(payload, day):
     return None
 
 
+DEBUG = False
+
+
 def get(url):
     req = urllib.request.Request(url, headers=UA)
     with urllib.request.urlopen(req, timeout=20) as r:
-        return r.read().decode('utf-8', 'replace')
+        body = r.read().decode('utf-8', 'replace')
+    if DEBUG:
+        print(f'  GET {url.split("?")[0]} -> {r.status}: {body[:300]!r}')
+    return body
 
 
 def from_yahoo_intraday(sym, day):
@@ -136,7 +142,10 @@ def main():
     ap.add_argument('--out', default=os.path.join(REPO, 'data'))
     ap.add_argument('--sources', default='yahoo-intraday,stooq,nasdaq')
     ap.add_argument('--dry-run', action='store_true', help='print what would be filled, write nothing')
+    ap.add_argument('--debug', action='store_true', help='print the start of every HTTP response')
     a = ap.parse_args()
+    global DEBUG
+    DEBUG = a.debug
     day = date.fromisoformat(a.date)
     syms = list(dict.fromkeys(s for s in (l.split('#')[0].strip().upper() for l in open(a.pool)) if s))
     order = [s.strip() for s in a.sources.split(',') if s.strip()]

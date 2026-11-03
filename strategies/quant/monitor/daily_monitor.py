@@ -445,6 +445,9 @@ def main():
     ap.add_argument('--config', default=str(HERE / 'config.json'))
     ap.add_argument('--out', help='write report to this file as well')
     ap.add_argument('--summary-out', help='write a one-line summary (for push notifications) to this file')
+    ap.add_argument('--html-out', help='write the phone-friendly email (HTML) to this file')
+    ap.add_argument('--text-out', help='write the plain-text email to this file')
+    ap.add_argument('--link', default='', help='link to the full report, shown in the email')
     ap.add_argument('--require-date', help='exit 3 if this date is a NYSE holiday, 4 if under 90%% of the pool has a bar '
                     'for it yet (Yahoo not updated); no report in either case')
     ap.add_argument('--check-only', action='store_true', help='with --require-date: only check data freshness')
@@ -496,8 +499,16 @@ def main():
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(text + '\n')
+    import email_view as ev
+    names = ev.load_names()
     if a.summary_out:
-        Path(a.summary_out).write_text(summary(asof, positions, cands) + '\n')
+        Path(a.summary_out).write_text(ev.subject(asof, positions, cands, names, NYSE_HOLIDAYS) + '\n')
+    if a.html_out:
+        Path(a.html_out).write_text(ev.build_html(asof, equity, positions, cands, cash_left, names, NYSE_HOLIDAYS,
+                                                  a.link, [fallback_note(asof)]), encoding='utf-8')
+    if a.text_out:
+        Path(a.text_out).write_text(ev.build_text(asof, equity, positions, cands, names, NYSE_HOLIDAYS) + '\n',
+                                    encoding='utf-8')
 
 
 if __name__ == '__main__':

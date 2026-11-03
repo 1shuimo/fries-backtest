@@ -7,7 +7,9 @@ Env vars (GitHub repo Settings -> Secrets and variables -> Actions):
   BARK_URL                  Bark 推送地址，如 https://api.day.app/xxxx -> iPhone
   TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
   SMTP_HOST SMTP_USER SMTP_PASS MAIL_TO [SMTP_PORT=465]   e.g. smtp.qq.com / smtp.gmail.com (app password)
-Usage: notify.py REPORT.md SUMMARY.txt [LINK]"""
+Usage: notify.py REPORT.md SUMMARY.txt [LINK] [--html EMAIL.html] [--text EMAIL.txt]
+With --html the email is sent as HTML (plain text from --text, else REPORT.md, as the fallback part);
+Telegram also uses the --text version, which reads better than Markdown tables on a phone."""
 import json
 import os
 import re
@@ -15,6 +17,7 @@ import smtplib
 import sys
 import urllib.parse
 import urllib.request
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
 
@@ -32,9 +35,17 @@ def post(url, data, form=False):
 
 
 def main():
-    report = open(sys.argv[1], encoding='utf-8').read()
-    title = open(sys.argv[2], encoding='utf-8').read().strip()
-    link = sys.argv[3] if len(sys.argv) > 3 else ''
+    args, opts, it = [], {}, iter(sys.argv[1:])
+    for x in it:
+        if x in ('--html', '--text'):
+            opts[x[2:]] = next(it, '')
+        else:
+            args.append(x)
+    report = open(args[0], encoding='utf-8').read()
+    title = open(args[1], encoding='utf-8').read().strip()
+    link = args[2] if len(args) > 2 else ''
+    read = lambda k: open(opts[k], encoding='utf-8').read() if opts.get(k) and os.path.exists(opts[k]) else ''
+    html_body, text_body = read('html'), read('text') or report
     e = os.environ.get
     sent, failed = [], []
 
@@ -59,10 +70,16 @@ def main():
             'title': '每日盯盘', 'body': title, 'group': 'fries', 'url': link}))
     if e('TELEGRAM_BOT_TOKEN') and e('TELEGRAM_CHAT_ID'):
         attempt('telegram', lambda: post(f"https://api.telegram.org/bot{e('TELEGRAM_BOT_TOKEN')}/sendMessage", {
-            'chat_id': e('TELEGRAM_CHAT_ID'), 'text': (title + '\n\n' + report)[:4000], 'disable_web_page_preview': True}))
+            'chat_id': e('TELEGRAM_CHAT_ID'), 'text': (title + '\n\n' + text_body)[:4000], 'disable_web_page_preview': True}))
     if e('SMTP_HOST') and e('SMTP_USER') and e('SMTP_PASS') and e('MAIL_TO'):
         def mail():
-            msg = MIMEText(report + (f'\n\n{link}\n' if link else ''), 'plain', 'utf-8')
+            plain = MIMEText(text_body + (f'\n\n{link}\n' if link else ''), 'plain', 'utf-8')
+            if html_body:
+                msg = MIMEMultipart('alternative')
+                msg.attach(plain)
+                msg.attach(MIMEText(html_body, 'html', 'utf-8'))
+            else:
+                msg = plain
             msg['Subject'] = title
             msg['From'] = formataddr(('盯盘提醒', e('SMTP_USER')))
             msg['To'] = e('MAIL_TO')

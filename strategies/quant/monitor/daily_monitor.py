@@ -441,7 +441,7 @@ def summary(asof, positions, cands):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--data', default=str(REPO / 'data'))
-    ap.add_argument('--asof', help='last complete session (default: latest date in SPY/NVDA data)')
+    ap.add_argument('--asof', help='last complete session (default: --require-date, else latest SPY/NVDA date)')
     ap.add_argument('--positions', default=str(HERE / 'positions.csv'))
     ap.add_argument('--config', default=str(HERE / 'config.json'))
     ap.add_argument('--out', help='write report to this file as well')
@@ -450,41 +450,64 @@ def main():
     ap.add_argument('--text-out', help='write the plain-text email to this file')
     ap.add_argument('--link', default='', help='link to the full report, shown in the email')
     ap.add_argument('--require-date', help='exit 3 if this date is a NYSE holiday, 4 if under 90%% of the pool has a bar '
-                    'for it yet (Yahoo not updated); no report in either case')
+                    'for it yet or any holding lacks its bar; no report in either case')
     ap.add_argument('--check-only', action='store_true', help='with --require-date: only check data freshness')
     a = ap.parse_args()
     data_dir = Path(a.data)
     global FALLBACK_FILE
     FALLBACK_FILE = data_dir / '_fallback.json'
+    want = date.fromisoformat(a.require_date) if a.require_date else None
+    asof = date.fromisoformat(a.asof) if a.asof else want
+    if want:
+        if asof != want:
+            ap.error('--asof must match --require-date')
+        if want.weekday() >= 5 or str(want) in NYSE_HOLIDAYS:
+            print(f'{want} is not a NYSE trading day', file=sys.stderr)
+            sys.exit(3)
     sectors = load_pool()
     positions = read_positions(a.positions)
     for p in positions:
         sectors.setdefault(p.symbol, '其他')
-    asof = date.fromisoformat(a.asof) if a.asof else max(
-        load_bars(data_dir / f'{s}.csv', s)[-1].date for s in ('SPY', 'NVDA') if (data_dir / f'{s}.csv').exists())
-    if a.require_date:
-        want = date.fromisoformat(a.require_date)
-        if want.weekday() >= 5 or str(want) in NYSE_HOLIDAYS:
-            print(f'{want} is not a NYSE trading day', file=sys.stderr)
-            sys.exit(3)
-        have = [s for s in sectors if (data_dir / f'{s}.csv').exists()]
-        fresh = sum(1 for s in have if any(b.date == want for b in load_bars(data_dir / f'{s}.csv', s)[-5:]))
-        print(f'data freshness for {want}: {fresh}/{len(have)} symbols have the bar', file=sys.stderr)
-        if fresh < FRESH_MIN * len(have):
+    if asof is None:
+        latest = []
+        for s in ('SPY', 'NVDA'):
+            f = data_dir / f'{s}.csv'
+            if f.exists():
+                bars = load_bars(f, s)
+                if bars:
+                    latest.append(bars[-1].date)
+        if not latest:
+            print('Cannot determine report date: no SPY/NVDA bars; specify --asof or --require-date',
+                  file=sys.stderr)
             sys.exit(4)
-        if a.check_only:
-            sys.exit(0)
+        asof = max(latest)
     data, missing, stale = {}, [], []
     for s in sectors:
         f = data_dir / f'{s}.csv'
         if not f.exists():
             missing.append(s)
             continue
-        bars = load_bars(f, s, asof)
+        try:
+            bars = load_bars(f, s, asof)
+        except (OSError, ValueError, KeyError, TypeError, csv.Error) as exc:
+            # A broken file cannot establish freshness. Keep the diagnostic but
+            # let the same coverage/holding checks decide whether to proceed.
+            print(f'{s}: cannot read bars: {exc}', file=sys.stderr)
+            bars = []
         if not bars or bars[-1].date != asof:
             stale.append(s)
             continue
         data[s] = bars
+    if want:
+        print(f'data freshness for {want}: {len(data)}/{len(sectors)} symbols have the bar', file=sys.stderr)
+        if not sectors or len(data) < FRESH_MIN * len(sectors):
+            sys.exit(4)
+    stale_holdings = sorted({p.symbol for p in positions if p.qty and p.symbol not in data})
+    if stale_holdings:
+        print(f'Holdings missing bars for {asof}: {", ".join(stale_holdings)}', file=sys.stderr)
+        sys.exit(4)
+    if want and a.check_only:
+        sys.exit(0)
     equity = float(json.loads(Path(a.config).read_text())['account_equity_usd'])
     for p in positions:
         if p.symbol in data:
@@ -528,3 +551,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

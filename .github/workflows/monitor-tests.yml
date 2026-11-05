@@ -1,0 +1,26 @@
+name: monitor-tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/daily-monitor.yml'
+      - '.github/workflows/monitor-tests.yml'
+      - 'tools/monitor_schedule.py'
+      - 'tools/notify.py'
+      - 'strategies/quant/**'
+      - 'tests/**'
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pandas
+      - run: python -m unittest discover -s tests -v
+      - run: cd strategies/quant && python -m unittest discover -s tests -v

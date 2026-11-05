@@ -20,6 +20,7 @@ import urllib.request
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
+from pathlib import Path
 
 
 def post(url, data, form=False):
@@ -31,7 +32,25 @@ def post(url, data, form=False):
         headers = {'Content-Type': 'application/json; charset=utf-8'}
     req = urllib.request.Request(url, body, headers)
     with urllib.request.urlopen(req, timeout=20) as r:
-        return r.status, r.read(300).decode('utf-8', 'replace')
+        return r.status, r.read(1024 * 1024).decode('utf-8', 'replace')
+
+
+class NotificationError(Exception):
+    """The provider did not confirm acceptance of the notification."""
+
+
+def verify_response(channel, result):
+    status, body = result
+    if not 200 <= status < 300:
+        raise NotificationError('HTTP failure')
+    payload = json.loads(body)
+    field, expected = ('ok', True) if channel == 'telegram' else (
+        'code', 0 if channel == 'serverchan' else 200)
+    # Strict types reject false as code=0 and 1 as ok=true.
+    if (not isinstance(payload, dict)
+            or type(payload.get(field)) is not type(expected)
+            or payload[field] != expected):
+        raise NotificationError('API failure')
 
 
 def main():
@@ -41,20 +60,24 @@ def main():
             opts[x[2:]] = next(it, '')
         else:
             args.append(x)
-    report = open(args[0], encoding='utf-8').read()
-    title = open(args[1], encoding='utf-8').read().strip()
+    report = Path(args[0]).read_text(encoding='utf-8')
+    title = Path(args[1]).read_text(encoding='utf-8').strip()
     link = args[2] if len(args) > 2 else ''
-    read = lambda k: open(opts[k], encoding='utf-8').read() if opts.get(k) and os.path.exists(opts[k]) else ''
+    read = lambda k: Path(opts[k]).read_text(encoding='utf-8') if opts.get(k) and os.path.exists(opts[k]) else ''
     html_body, text_body = read('html'), read('text') or report
     e = os.environ.get
     sent, failed = [], []
 
     def attempt(name, fn):
         try:
-            print(name, fn())
+            result = fn()
+            if name != 'email':
+                verify_response(name, result)
+            print(name, 'ok')
             sent.append(name)
         except Exception as exc:  # one broken channel must not block the others
-            print(name, 'FAILED', exc)
+            # Provider bodies and exception messages can contain tokens or addresses.
+            print(name, 'FAILED', type(exc).__name__)
             failed.append(name)
 
     if e('SERVERCHAN_KEY'):
@@ -85,15 +108,18 @@ def main():
             msg['To'] = e('MAIL_TO')
             with smtplib.SMTP_SSL(e('SMTP_HOST'), int(e('SMTP_PORT') or 465), timeout=30) as s:
                 s.login(e('SMTP_USER'), e('SMTP_PASS'))
-                s.sendmail(e('SMTP_USER'), [x.strip() for x in e('MAIL_TO').split(',')], msg.as_string())
+                refused = s.sendmail(e('SMTP_USER'), [x.strip() for x in e('MAIL_TO').split(',')], msg.as_string())
+                if refused:
+                    raise NotificationError('SMTP recipients refused')
             return 'ok'
         attempt('email', mail)
     print('sent:', sent or 'none', 'failed:', failed or 'none')
     if not sent and not failed:
         print('::warning::没有配置任何通知渠道（SERVERCHAN_KEY / PUSHPLUS_TOKEN / BARK_URL / TELEGRAM_* / SMTP_*）')
-    if failed and not sent:
+    if failed or not sent:
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
+

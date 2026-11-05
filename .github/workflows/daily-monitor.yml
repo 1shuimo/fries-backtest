@@ -3,16 +3,17 @@ name: daily-monitor
 # Every US trading day after the close: download pool prices, run the B1+MA60+day-3 checklist,
 # commit the report and push it to WeChat / iPhone / email / Telegram via tools/notify.py (secrets).
 on:
-  # GitHub drops scheduled runs now and then (2026-11-02 never fired), so there are two;
-  # the second one skips when the first already wrote that day's report.
-  # Off the hour on purpose: top-of-hour schedules are the ones most often delayed or dropped.
+  # Best effort only: independent off-hour recovery slots, not a timing SLA.
+  # UTC day rollover is intentional: Tue-Sat slots finish the prior US session.
   schedule:
-    - cron: "7 22 * * 1-5"    # 22:07 UTC = 06:07 Beijing; 17:07 New York (EST) / 18:07 (EDT)
-    - cron: "7 23 * * 1-5"    # backup: 23:07 UTC = 07:07 Beijing; skips if 06:07 already wrote the report
+    - cron: "7 22 * * 1-5"    # Beijing 06:07 Tue-Sat
+    - cron: "7 23 * * 1-5"    # Beijing 07:07 Tue-Sat
+    - cron: "37 0 * * 2-6"    # Beijing 08:37 Tue-Sat
+    - cron: "47 1 * * 2-6"    # Beijing 09:47 Tue-Sat, final recovery
   workflow_dispatch:
     inputs:
       asof:
-        description: "Data date YYYY-MM-DD (blank = today in New York)"
+        description: "Data date YYYY-MM-DD (blank = last closed New York session)"
         default: ""
 
 permissions:
@@ -24,30 +25,40 @@ concurrency:
 
 jobs:
   run:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
+      # Refresh main after acquiring the concurrency lock: queued runs can carry old SHAs.
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install yfinance pandas anthropic
-      - name: Monitor tests
-        run: cd strategies/quant && python -m unittest tests.test_daily_monitor
-      - name: Trading date
+      - name: Trading date and delivery window
         id: day
-        run: |
-          d="${{ inputs.asof }}"
-          echo "date=${d:-$(TZ=America/New_York date +%F)}" >> "$GITHUB_OUTPUT"
+        env:
+          ASOF: ${{ inputs.asof }}
+        run: python tools/monitor_schedule.py --asof "$ASOF" --output "$GITHUB_OUTPUT"
       - name: Skip if today's report already exists
         id: done
         run: |
           out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ -f "$out" ]; then
-            echo "report for ${{ steps.day.outputs.date }} already exists (earlier schedule ran)"; echo "skip=true" >> "$GITHUB_OUTPUT"
+          if [ -f "$out" ]; then
+            echo "report for ${{ steps.day.outputs.date }} already exists; skipping to avoid duplicate delivery (this does not prove notification delivery)"; echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Install dependencies
+        if: steps.day.outputs.skip != 'true' && steps.done.outputs.skip != 'true'
+        run: pip install yfinance pandas anthropic
+      - name: Monitor tests
+        if: steps.day.outputs.skip != 'true' && steps.done.outputs.skip != 'true'
+        run: |
+          python -m unittest discover -s tests
+          (cd strategies/quant && python -m unittest discover -s tests)
       - name: Download prices until today's bar is there
         id: data
-        if: steps.done.outputs.skip != 'true'
+        if: steps.day.outputs.skip != 'true' && steps.done.outputs.skip != 'true'
         run: |
           cp strategies/friestrader/pool.txt /tmp/pool.txt
           tail -n +2 strategies/quant/monitor/positions.csv | cut -d, -f1 >> /tmp/pool.txt
@@ -62,6 +73,7 @@ jobs:
             code=$?
             set -e
             if [ $code -eq 0 ]; then echo "state=ready" >> "$GITHUB_OUTPUT"; exit 0; fi
+            if [ $code -ne 0 ] && [ $code -ne 3 ] && [ $code -ne 4 ]; then exit "$code"; fi
             if [ $code -eq 3 ]; then echo "state=holiday" >> "$GITHUB_OUTPUT"; exit 0; fi
             if [ $attempt -lt 4 ]; then echo "data not updated yet even with backups (attempt $attempt), waiting 10 min"; sleep 600; fi
           done
@@ -70,17 +82,20 @@ jobs:
         id: report
         if: steps.data.outputs.state == 'ready'
         env:
+          ASOF: ${{ inputs.asof }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional: Claude's fundamental brief per stock
         run: |
+          python tools/monitor_schedule.py --asof "$ASOF" --check-date "${{ steps.day.outputs.date }}" --output /tmp/window.txt
           out="strategies/quant/monitor/reports/${{ steps.day.outputs.date }}.md"
           python tools/fetch_names.py --limit 40 || true   # company names for the email, cached in names.json
           python strategies/quant/monitor/daily_monitor.py --asof "${{ steps.day.outputs.date }}" \
-            --out "$out" --summary-out /tmp/summary.txt --html-out /tmp/email.html --text-out /tmp/email.txt \
+            --require-date "${{ steps.day.outputs.date }}" --out "$out" --summary-out /tmp/summary.txt --html-out /tmp/email.html --text-out /tmp/email.txt \
             --link "https://github.com/${{ github.repository }}/blob/main/$out"
           echo "out=$out" >> "$GITHUB_OUTPUT"
       - name: Warn that data is not updated
-        # Only the backup schedule or a manual run warns; the first schedule leaves it to the backup.
-        if: steps.data.outputs.state == 'stale' && (github.event_name != 'schedule' || github.event.schedule == '7 23 * * 1-5')
+        id: stale_notify
+        # Only the final recovery slot or a manual run sends a stale-data warning.
+        if: steps.data.outputs.state == 'stale' && (github.event_name != 'schedule' || github.event.schedule == '47 1 * * 2-6')
         env:
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
@@ -95,21 +110,25 @@ jobs:
         run: |
           d="${{ steps.day.outputs.date }}"
           echo "盯盘 $d：Yahoo 行情还没更新到 $d，今天没有生成报告，请不要按旧报告操作" > /tmp/summary.txt
-          { echo "# 盯盘 $d：行情未更新"; echo; echo "Yahoo 和备用源（Nasdaq、Yahoo 分时）重试 4 次（约 40 分钟）后，股票池里仍有超过 10% 的股票没有 $d 的日线，所以没有生成报告。"; echo;
+          { echo "# 盯盘 $d：行情未更新"; echo; echo "Yahoo 和备用源（Nasdaq、Yahoo 分时）重试 4 次（间隔共约 30 分钟）后，完整股票池覆盖不足 90%，或仍有持仓缺少 $d 的日线，所以没有生成报告。"; echo;
             echo "可以稍后在 Actions 里手动运行 daily-monitor（asof 填 $d）。"; } > /tmp/stale.md
           python tools/notify.py /tmp/stale.md /tmp/summary.txt "https://github.com/${{ github.repository }}/actions/workflows/daily-monitor.yml"
-          exit 1
       - name: Commit report
         if: steps.report.outputs.out != ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add strategies/quant/monitor/reports/ strategies/quant/monitor/names.json
-          git commit -m "Daily monitor ${{ steps.day.outputs.date }} [skip ci]" || echo "nothing to commit"
-          git push
+          if ! git diff --cached --quiet; then
+            git commit -m "Daily monitor ${{ steps.day.outputs.date }} [skip ci]"
+          fi
+          git pull --rebase origin main
+          git push origin HEAD:main
       - name: Notify (WeChat / Bark / Telegram / email)
+        id: notify
         if: steps.report.outputs.out != ''
         env:
+          ASOF: ${{ inputs.asof }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           BARK_URL: ${{ secrets.BARK_URL }}
@@ -121,6 +140,40 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
         run: |
+          python tools/monitor_schedule.py --asof "$ASOF" --check-date "${{ steps.day.outputs.date }}" --output /tmp/window.txt
           python tools/notify.py "${{ steps.report.outputs.out }}" /tmp/summary.txt \
             "https://github.com/${{ github.repository }}/blob/main/${{ steps.report.outputs.out }}" \
             --html /tmp/email.html --text /tmp/email.txt
+
+      - name: Run summary
+        if: always()
+        env:
+          TARGET: ${{ steps.day.outputs.date }}
+          WINDOW_SKIP: ${{ steps.day.outputs.skip }}
+          WINDOW_REASON: ${{ steps.day.outputs.reason }}
+          REPORT_EXISTS: ${{ steps.done.outputs.skip }}
+          DATA_STATE: ${{ steps.data.outputs.state }}
+          REPORT: ${{ steps.report.outputs.out }}
+          STALE_NOTIFY_OUTCOME: ${{ steps.stale_notify.outcome }}
+          NOTIFY_OUTCOME: ${{ steps.notify.outcome }}
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+        run: |
+          {
+            echo "## Daily monitor result"
+            echo "- Target session: $TARGET"
+            echo "- Trigger: $EVENT ($CRON)"
+            echo "- Runner observation (UTC): $(date -u +%FT%TZ)"
+            echo "- Outside delivery window: ${WINDOW_SKIP:-false} $WINDOW_REASON"
+            echo "- Existing report skipped: ${REPORT_EXISTS:-false}"
+            echo "- Data: ${DATA_STATE:-not checked}"
+            echo "- Generated report: ${REPORT:-none}"
+            echo "- Stale-data warning step: ${STALE_NOTIFY_OUTCOME:-not run}"
+            echo "- Notification step: ${NOTIFY_OUTCOME:-not run}"
+            echo "A skipped report does not establish notification delivery or on-time scheduling."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail on stale data
+        if: always() && steps.data.outputs.state == 'stale'
+        run: |
+          echo "::error::Report not produced: incomplete session data; later slots may recover."
+          exit 1

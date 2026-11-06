@@ -114,6 +114,7 @@ jobs:
             echo "可以稍后在 Actions 里手动运行 daily-monitor（asof 填 $d）。"; } > /tmp/stale.md
           python tools/notify.py /tmp/stale.md /tmp/summary.txt "https://github.com/${{ github.repository }}/actions/workflows/daily-monitor.yml"
       - name: Commit report
+        id: publish
         if: steps.report.outputs.out != ''
         run: |
           git config user.name "github-actions[bot]"
@@ -122,8 +123,13 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Daily monitor ${{ steps.day.outputs.date }} [skip ci]"
           fi
-          git pull --rebase origin main
-          git push origin HEAD:main
+          # Price downloads leave tracked data/ files dirty. Publish the report
+          # commit from a clean detached worktree; preserve all runner changes.
+          publish_dir=$(mktemp -d)
+          git worktree add --detach "$publish_dir" HEAD
+          trap 'git worktree remove --force "$publish_dir"' EXIT
+          git -C "$publish_dir" pull --rebase origin main
+          git -C "$publish_dir" push origin HEAD:main
       - name: Notify (WeChat / Bark / Telegram / email)
         id: notify
         if: steps.report.outputs.out != ''
@@ -154,6 +160,7 @@ jobs:
           REPORT_EXISTS: ${{ steps.done.outputs.skip }}
           DATA_STATE: ${{ steps.data.outputs.state }}
           REPORT: ${{ steps.report.outputs.out }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
           STALE_NOTIFY_OUTCOME: ${{ steps.stale_notify.outcome }}
           NOTIFY_OUTCOME: ${{ steps.notify.outcome }}
           EVENT: ${{ github.event_name }}
@@ -168,6 +175,7 @@ jobs:
             echo "- Existing report skipped: ${REPORT_EXISTS:-false}"
             echo "- Data: ${DATA_STATE:-not checked}"
             echo "- Generated report: ${REPORT:-none}"
+            echo "- Publish step: ${PUBLISH_OUTCOME:-not run}"
             echo "- Stale-data warning step: ${STALE_NOTIFY_OUTCOME:-not run}"
             echo "- Notification step: ${NOTIFY_OUTCOME:-not run}"
             echo "A skipped report does not establish notification delivery or on-time scheduling."
@@ -177,3 +185,4 @@ jobs:
         run: |
           echo "::error::Report not produced: incomplete session data; later slots may recover."
           exit 1
+

@@ -7,6 +7,8 @@ Env vars (GitHub repo Settings -> Secrets and variables -> Actions):
   BARK_URL                  Bark 推送地址，如 https://api.day.app/xxxx -> iPhone
   TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID
   SMTP_HOST SMTP_USER SMTP_PASS MAIL_TO [SMTP_PORT=465]   e.g. smtp.qq.com / smtp.gmail.com (app password)
+  RESEND_API_KEY + MAIL_TO [RESEND_FROM]   email over HTTPS (resend.com), for hosts without SMTP access;
+                            RESEND_API_KEY may be a placeholder where a proxy injects the real key
 Usage: notify.py REPORT.md SUMMARY.txt [LINK] [--html EMAIL.html] [--text EMAIL.txt]
 With --html the email is sent as HTML (plain text from --text, else REPORT.md, as the fallback part);
 Telegram also uses the --text version, which reads better than Markdown tables on a phone."""
@@ -71,7 +73,7 @@ def main():
     def attempt(name, fn):
         try:
             result = fn()
-            if name != 'email':
+            if name not in ('email', 'resend'):  # these two raise on failure themselves
                 verify_response(name, result)
             print(name, 'ok')
             sent.append(name)
@@ -113,9 +115,27 @@ def main():
                     raise NotificationError('SMTP recipients refused')
             return 'ok'
         attempt('email', mail)
+    if e('RESEND_API_KEY') and e('MAIL_TO'):
+        def resend():
+            payload = {'from': e('RESEND_FROM') or '盯盘提醒 <onboarding@resend.dev>',
+                       'to': [x.strip() for x in e('MAIL_TO').split(',') if x.strip()],
+                       'subject': title, 'text': text_body + (f'\n\n{link}\n' if link else '')}
+            if html_body:
+                payload['html'] = html_body
+            req = urllib.request.Request('https://api.resend.com/emails', json.dumps(payload).encode(),
+                                         {'Content-Type': 'application/json',
+                                          # Cloudflare in front of Resend blocks Python's default agent (error 1010).
+                                          'User-Agent': 'fries-backtest-monitor/1.0',
+                                          'Authorization': f"Bearer {e('RESEND_API_KEY')}"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                out = json.loads(r.read().decode() or '{}')
+            if not out.get('id'):
+                raise NotificationError(f'Resend did not accept the email: {out}')
+            return f"ok {out['id']}"
+        attempt('resend', resend)
     print('sent:', sent or 'none', 'failed:', failed or 'none')
     if not sent and not failed:
-        print('::warning::没有配置任何通知渠道（SERVERCHAN_KEY / PUSHPLUS_TOKEN / BARK_URL / TELEGRAM_* / SMTP_*）')
+        print('::warning::没有配置任何通知渠道（SERVERCHAN_KEY / PUSHPLUS_TOKEN / BARK_URL / TELEGRAM_* / SMTP_* / RESEND_API_KEY）')
     if failed or not sent:
         sys.exit(1)
 

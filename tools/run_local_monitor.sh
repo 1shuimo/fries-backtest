@@ -43,7 +43,10 @@ python3 tools/fetch_names.py --limit 40 > /dev/null 2>&1 || true
 python3 strategies/quant/monitor/daily_monitor.py --asof "$day" --require-date "$day" --out "$out" \
   --summary-out "$tmp/summary.txt" --html-out "$tmp/email.html" --text-out "$tmp/email.txt" \
   --link "https://github.com/1shuimo/fries-backtest/blob/main/$out" > /dev/null
+# EMAIL_FORMAT=text sends only the plain-text version (the HTML version has not been reaching Gmail).
+html_arg=(--html "$tmp/email.html")
+[ "${EMAIL_FORMAT:-html}" = text ] && html_arg=()
 python3 tools/notify.py "$out" "$tmp/summary.txt" "https://github.com/1shuimo/fries-backtest/blob/main/$out" \
-  --html "$tmp/email.html" --text "$tmp/email.txt"
+  "${html_arg[@]}" --text "$tmp/email.txt"
 echo "SUMMARY: $(cat "$tmp/summary.txt")"
 echo "RESULT: report $out emailed"
